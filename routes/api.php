@@ -172,7 +172,7 @@ Route::post('recursos/crear_recurso/{id}', 'RecursosController@crear_recurso');
 Route::post('recursos/modificar_cantidad/{id}', 'RecursosController@modificar_cantidad');
 Route::post('recursos/cancelar_reserva/{id}', 'RecursosController@cancelar_reserva');
 Route::post('recursos/eliminar_bloqueo/{id}', 'RecursosController@eliminar_bloqueo');
-
+Route::put('recursos/actualizar_reservas_activas/{id}', 'RecursosController@actualizar_reservas_activas');
 
 //Cursos/Materias
 Route::get('cursos/lista_alumnos/{id}', 'CursosController@lista_alumnos');

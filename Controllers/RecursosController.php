@@ -96,28 +96,52 @@ class RecursosController extends Controller
                 'messages' => 'Error en la cancelación de la reserva'.$e->getMessage(),
             ], 500);
         }
-
-        public function eliminar_bloqueo($id, Request $request) {
-
-            $data = $request->all();
-    
-            try {
-                $informe = $this->RecursosService->eliminar_bloqueo($id, $data['id_bloqueo'], $data['id_usuario']);
-    
-                return response()->json([
-                    'success' => true,
-                    'data' => $informe,
-                    'messages' => '',
-                ]);
-            }
-            catch(Exception $e) {
-                Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
-    
-                return response()->json([
-                    'success' => false,
-                    'data' => null,
-                    'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
-                ], 500);
-            }
     }
+
+    public function eliminar_bloqueo($id, Request $request) {
+
+        $data = $request->all();
+
+        try {
+            $informe = $this->RecursosService->eliminar_bloqueo($id, $data['id_bloqueo'], $data['id_usuario']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }
+        catch(Exception $e) {
+            Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function actualizar_reservas_activas($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->actualizar_reservas_activas($id, $data['id_usuario'], $data['id_nivel']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la actualizacion de reservas activas' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }

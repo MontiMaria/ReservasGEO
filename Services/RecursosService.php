@@ -63,4 +63,14 @@ class RecursosService
             throw $e;
         }
     }
+
+     public function actualizar_reservas_activas($id, $id_usuario, $id_nivel)
+    {
+        try {
+            return $this->RecursosRep->actualizar_reservas_activas($id, $id_usuario, $id_nivel);
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
+        }
+    }
 }

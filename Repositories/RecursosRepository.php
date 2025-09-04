@@ -160,4 +160,31 @@ class RecursosRepository
             throw $e;
         }
     }
+
+    public function actualizar_reservas_activas($id,$id_usuario, $id_nivel){
+
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            $fechaActual = Carbon::now()->format('Y-m-d');
+            $horaActual = Carbon::now()->format('H:i:s');
+
+            $reservas = RecursoReserva::on($connection)
+                ->where('B','=',0)
+                ->where(function($query) use ($fechaActual, $horaActual, $id_nivel){
+                    $query->where('Fecha_R', '<', $fechaActual)
+                        ->where('ID_Nivel',$id_nivel)
+                        ->orWhere(function($q) use ($fechaActual, $horaActual){
+                            $q->where('Fecha_R',$fechaActual)
+                                ->where('Hora_Fin','<=', $horaActual);
+                        });
+                })
+                ->update(['B' => '1', 'B_Motivo' => 'Reserva expirada']);
+
+            return "Reservas actualizadas";
+
+        } catch(Exception $e) {
+            return $e->getMessage();
+        }
+    }
 }
