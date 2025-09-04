@@ -121,8 +121,8 @@ class RecursosRepository
 
             $reserva->B = 1;
             $reserva->B_Motivo = $motivo;
-            $reserva->Fecha_B = Carbon::now()->format('Y-m-d');
-            $reserva->Hora_B = Carbon::now()->format('H:i:s');
+            $reserva->Fecha_B = now()->toDateString();
+            $reserva->Hora_B = now()->toTimeString();
             $reserva->ID_Usuario_B = $id_usuario;
             $reserva->save();
 
@@ -146,8 +146,8 @@ class RecursosRepository
             $bloqueo = RecursoBloqueo::on($conn_name)->findOrFail($id_bloqueo);
 
             $bloqueo->B = 1;
-            $bloqueo->Fecha_B = Carbon::now()->format('Y-m-d');
-            $bloqueo->Hora_B = Carbon::now()->format('H:i:s');
+            $bloqueo->Fecha_B = now()->toDateString();
+            $bloqueo->Hora_B = now()->toTimeString();
             $bloqueo->ID_Usuario_B = $id_usuario;
             $bloqueo->save();
 
