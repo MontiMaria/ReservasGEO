@@ -169,9 +169,11 @@ Route::post('rite/completar_rite_alumno/{id}', 'RiteController@completar_rite_al
 
 //Rutas Recursos
 Route::post('recursos/crear_recurso/{id}', 'RecursosController@crear_recurso');
-Route::post('recursos/modificar_cantidad/{id}', 'RecursosController@modificar_cantidad');
-Route::post('recursos/cancelar_reserva/{id}', 'RecursosController@cancelar_reserva');
-Route::post('recursos/eliminar_bloqueo/{id}', 'RecursosController@eliminar_bloqueo');
+Route::post('recursos/agregar_bloqueo/{id}', 'RecursosController@agregar_bloqueo');
+Route::patch('recursos/modificar_cantidad/{id}', 'RecursosController@modificar_cantidad');
+Route::delete('recursos/cancelar_reserva/{id}', 'RecursosController@cancelar_reserva');
+Route::delete('recursos/eliminar_bloqueo/{id}', 'RecursosController@eliminar_bloqueo');
+Route::get('recursos/ver_lista_recursos/{id}', 'RecursosController@ver_lista_recursos');
 
 
 //Cursos/Materias

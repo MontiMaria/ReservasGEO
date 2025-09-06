@@ -3,10 +3,14 @@
 namespace App\Repositories;
 
 use App\Models\Institucional\Recurso;
+use App\Models\Institucional\RecursoBloqueo;
+use App\Models\Institucional\RecursoReserva;
 use App\Services\DataBaseService;
 use App\Services\FuncionesService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
+use Dotenv\Exception\ValidationException;
 use Exception;
 use InvalidArgumentException;
 use DomainException;
@@ -63,14 +67,27 @@ class RecursosRepository
                         throw new DomainException("La hora de incio es mayor o igual a la hora de finalizacion");
                     }
 
-                    $bloqueo = $nuevo_recurso->bloqueos()->create([
-                        'Dia_Semana' => $dia,
-                        'HI' => $hi,
-                        'HF' => $hf,
-                        'ID_Nivel' => $id_nivel,
-                        'Causa' => $causa
-                    ]);
+                    // Donde 4=Institucional
+                    if($id_nivel == 4 && $b['id_nivel_b'] != $id_nivel) {
+                        $id_nivel_b = $b['id_nivel_b'];
 
+                        $bloqueo = $nuevo_recurso->bloqueos()->create([
+                            'Dia_Semana' => $dia,
+                            'HI' => $hi,
+                            'HF' => $hf,
+                            'ID_Nivel' => $id_nivel_b,
+                            'Causa' => $causa
+                        ]);
+                    }
+                    else {
+                        $bloqueo = $nuevo_recurso->bloqueos()->create([
+                            'Dia_Semana' => $dia,
+                            'HI' => $hi,
+                            'HF' => $hf,
+                            'ID_Nivel' => $id_nivel,
+                            'Causa' => $causa
+                        ]);
+                    }
                     $bloqueos_cargados[] = $bloqueo->toArray();
                 }
             }
@@ -136,6 +153,50 @@ class RecursosRepository
         }
     }
 
+    public function agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa) {
+        $id_institucion = $id;
+
+        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+        DB::connection($conn_name)->beginTransaction();
+
+        try {
+            $consulta_recurso = Recurso::on($conn_name)->findOrFail($id_recurso);
+
+            if($consulta_recurso->ID_Nivel != $id_nivel && $consulta_recurso->ID_Nivel != 4) {
+                throw new ValidationException("El nivel ingresado no es valido para el bloqueo del recurso");
+            }
+            if($dia_semana < 1 || $dia_semana > 5) {
+                throw new InvalidArgumentException("El valor ingresado se encuentra fuera del rango");
+            }
+            try {
+                $hi_p = Carbon::parse($hi);
+                $hf_p = Carbon::parse($hf);
+            }
+            catch (Exception $e) {
+                throw new InvalidArgumentException("Formato de hora inválido.");
+            }
+            if($hi_p >= $hf_p) {
+                throw new DomainException("La hora de incio es mayor o igual a la hora de finalizacion");
+            }
+
+            $resultado = $consulta_recurso->bloqueos()->create([
+                'Dia_Semana' => $dia_semana,
+                'HI' => $hi,
+                'HF' => $hf,
+                'ID_Nivel' => $id_nivel,
+                'Causa' => $causa
+            ]);
+
+            DB::connection($conn_name)->commit();
+
+            return $resultado;
+        }
+        catch(Exception $e) {
+            DB::connection($conn_name)->rollBack();
+            throw $e;
+        }
+    }
+
     public function eliminar_bloqueo($id, $id_bloqueo, $id_usuario) {
         $id_institucion = $id;
 
@@ -159,5 +220,94 @@ class RecursosRepository
             DB::connection($conn_name)->rollback();
             throw $e;
         }
+    }
+
+    public function ver_lista_recursos($id, $id_nivel, $id_tipo) {
+        $id_institucion = $id;
+        $per_page = 8;
+        $resultado = [];
+
+        if($id_tipo < 0 || $id_tipo > 3) {
+            throw new InvalidArgumentException("El tipo de recurso ingresado no es valido");
+        }
+
+        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        if($id_tipo == 0) {
+            $consulta_recursos = Recurso::on($conn_name)
+                ->select("ID", "Recurso", "Cantidad", "Descripcion", "ID_Tipo", "ID_Nivel")
+                ->where("B", 0)
+                ->where(function($q) use ($id_nivel) {
+                    $q->where("ID_Nivel", $id_nivel)
+                    ->orWhere("ID_Nivel" , 4);
+                })
+                ->with(["bloqueos" => function($q) use ($id_nivel) {
+                    $q->select("ID", "ID_Recurso", "Dia_Semana", "HI", "HF", "ID_Nivel", "Causa")
+                    ->where("B", 0)
+                    ->where(function($q2) use ($id_nivel) {
+                        $q2->where("ID_Nivel", $id_nivel)
+                        ->orWhere("ID_Nivel" , 4);
+                    });
+                }])
+                ->orderBy("ID_Tipo")
+                ->orderBy("Recurso")
+                ->paginate($per_page);
+        }
+        else {
+            $consulta_recursos = Recurso::on($conn_name)
+                ->select("ID", "Recurso", "Cantidad", "Descripcion", "ID_Tipo", "ID_Nivel")
+                ->where("B", 0)
+                ->where("ID_Tipo", $id_tipo)
+                ->where(function($q) use ($id_nivel) {
+                    $q->where("ID_Nivel", $id_nivel)
+                    ->orWhere("ID_Nivel" , 4);
+                })
+                ->with(["bloqueos" => function($q) use ($id_nivel) {
+                    $q->select("ID", "ID_Recurso", "Dia_Semana", "HI", "HF", "ID_Nivel", "Causa")
+                    ->where("B", 0)
+                    ->where(function($q2) use ($id_nivel) {
+                        $q2->where("ID_Nivel", $id_nivel)
+                        ->orWhere("ID_Nivel" , 4);
+                    });
+                }])
+                ->orderBy("Recurso")
+                ->paginate($per_page);
+        }
+
+        $data = collect($consulta_recursos->items())->map(function($r)  {
+            $bloqueos = $r->bloqueos instanceof Collection ? $r->bloqueos : [];
+
+            $list_bloqueos = $bloqueos->map(function($b)  {
+                return [
+                    "ID" => $b->ID,
+                    "Dia_Semana_Nombre" => $b->dia_semana_nombre,
+                    "HI" => $b->HI,
+                    "HF" => $b->HF,
+                    "ID_Nivel" => $b->ID_Nivel,
+                    "Causa" => $b->Causa
+                ];
+            })->values()->all();
+
+            return [
+                "ID" => $r->ID,
+                "Recurso" => $r->Recurso,
+                "Cantidad" => $r->Cantidad,
+                "Descripcion" => $r->Descripcion,
+                "Tipo_Recurso" => $r->tipo_recurso_nombre,
+                "ID_Nivel" => $r->ID_Nivel,
+                "bloqueos" => $list_bloqueos
+            ];
+            })->values()->all();
+
+        $resultado = [
+            'items' => $data,
+            'pagination' => [
+                'current_page' => $consulta_recursos->currentPage(),
+                'has_next' => $consulta_recursos->hasMorePages(),
+                'has_prev' => $consulta_recursos->currentPage() > 1
+            ],
+        ];
+
+        return $resultado;
     }
 }

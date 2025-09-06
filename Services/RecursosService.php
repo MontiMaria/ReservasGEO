@@ -52,10 +52,34 @@ class RecursosService
         }
     }
 
+    public function agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa) {
+        try {
+
+            return $this->RecursosRep->agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa);
+
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+
     public function eliminar_bloqueo($id, $id_bloqueo, $id_usuario) {
         try {
 
             return $this->RecursosRep->eliminar_bloqueo($id, $id_bloqueo, $id_usuario);
+
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+
+    public function ver_lista_recursos($id, $id_nivel, $id_tipo) {
+        try {
+
+            return $this->RecursosRep->ver_lista_recursos($id, $id_nivel, $id_tipo);
 
         }
         catch(Exception $e) {
