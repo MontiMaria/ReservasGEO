@@ -172,7 +172,7 @@ Route::post('recursos/crear_recurso/{id}', 'RecursosController@crear_recurso');
 Route::patch('recursos/modificar_cantidad/{id}', 'RecursosController@modificar_cantidad');
 Route::delete('recursos/cancelar_reserva/{id}', 'RecursosController@cancelar_reserva');
 Route::delete('recursos/eliminar_bloqueo/{id}', 'RecursosController@eliminar_bloqueo');
-
+Route::delete('recursos/eliminar_recurso/{id}', 'RecursosController@eliminar_recurso');
 
 //Cursos/Materias
 Route::get('cursos/lista_alumnos/{id}', 'CursosController@lista_alumnos');

@@ -4,15 +4,20 @@ namespace App\Services;
 
 use App\Repositories\RecursosRepository;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
+use App\Notifications\RecursoCanceladoNotification;
 use Exception;
+use Illuminate\Support\Facades\Notification;
 
 class RecursosService
 {
     private $RecursosRep;
+    protected $dataBaseService;
 
-    function __construct(RecursosRepository $RecursosRep)
+    public function __construct(RecursosRepository $recursosRep, DataBaseService $dataBaseService)
     {
-        $this->RecursosRep = $RecursosRep;
+        $this->RecursosRep = $recursosRep;
+        $this->dataBaseService = $dataBaseService;
     }
 
     public function crear_recurso($id, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos)
@@ -52,14 +57,35 @@ class RecursosService
         }
     }
 
-    public function eliminar_bloqueo($id, $id_bloqueo, $id_usuario) {
+    public function eliminar_bloqueo($id, $id_bloqueo) {
         try {
 
-            return $this->RecursosRep->eliminar_bloqueo($id, $id_bloqueo, $id_usuario);
+            return $this->RecursosRep->eliminar_bloqueo($id, $id_bloqueo);
 
         }
         catch(Exception $e) {
             Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+
+    public function eliminar_recurso($id, $id_recurso, $id_usuario)
+    {
+        $id_institucion = $id;
+        try {
+           // $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            
+            $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario);
+            
+            if ($userIds->isNotEmpty()) {
+                $usuarios_a_notificar = User::find($userIds);
+                Notification::send($usuarios_a_notificar, new RecursoCanceladoNotification());
+            }
+
+            return "El recurso y todas sus reservas han sido eliminados correctamente.";
+
+        } catch (Exception $e) {
+            Log::error("ERROR al eliminar el recurso {$id_recurso}: " . $e->getMessage(), ['exception' => $e]);
             throw $e;
         }
     }

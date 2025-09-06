@@ -53,7 +53,7 @@ class RecursosController extends Controller
     public function modificar_cantidad($id, Request $request) {
 
         $data = $request->all();
-        
+
         try {
             $informe = $this->RecursosService->modificar_cantidad($id, $data['id_recurso'], $data['cantidad']);
             return response()->json([
@@ -71,7 +71,7 @@ class RecursosController extends Controller
                 'messages' => 'Error en la modificación de la cantidad del recurso'.$e->getMessage(),
             ], 500);
         }
-        
+
     }
 
     public function cancelar_reserva($id, Request $request) {
@@ -79,7 +79,7 @@ class RecursosController extends Controller
         $data = $request->all();
 
         try {
-            $informe = $this->RecursosService->cancelar_reserva($id, $data['id_reserva'], $data['motivo']);
+            $informe = $this->RecursosService->cancelar_reserva($id, $data['id_reserva'], $data['motivo'], $data['id_usuario']);
 
             return response()->json([
                 'success' => true,
@@ -96,28 +96,60 @@ class RecursosController extends Controller
                 'messages' => 'Error en la cancelación de la reserva'.$e->getMessage(),
             ], 500);
         }
+    }
 
-        public function eliminar_bloqueo($id, Request $request) {
+    public function eliminar_bloqueo($id, Request $request) {
 
-            $data = $request->all();
-    
-            try {
-                $informe = $this->RecursosService->eliminar_bloqueo($id, $data['id_bloqueo'], $data['id_usuario']);
-    
-                return response()->json([
-                    'success' => true,
-                    'data' => $informe,
-                    'messages' => '',
-                ]);
+        $data = $request->all();
+
+        try {
+
+            $informe = $this->RecursosService->eliminar_bloqueo($id, $data['id_bloqueo'], $data['id_usuario']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }
+        catch(Exception $e) {
+            Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function eliminar_recurso(Request $request, $id)
+    {
+        try {
+            $id_institucion = $id;
+            $id_recurso = $request->input('id_recurso');
+            $id_usuario = $request->input('id_usuario');
+
+            if (!$id_recurso || !$id_usuario) {
+                throw new Exception("Los parámetros id_recurso y id_usuario son requeridos.");
             }
-            catch(Exception $e) {
-                Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
-    
-                return response()->json([
-                    'success' => false,
-                    'data' => null,
-                    'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
-                ], 500);
-            }
+
+            $resultado = $this->RecursosService->eliminar_recurso($id_institucion, $id_recurso, $id_usuario);
+
+            return response()->json([
+                'success' => true,
+                'data' => $resultado,
+                'messages' => 'El recurso y sus reservas asociadas fueron eliminados correctamente.',
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR al eliminar recurso: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la eliminación del recurso: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
