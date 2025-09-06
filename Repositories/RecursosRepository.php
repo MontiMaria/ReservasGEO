@@ -155,7 +155,7 @@ class RecursosRepository
             $bloqueo->save();
 
             DB::connection($conn_name)->commit();
-            return "Bloqueo eliminado correctamente";
+            return $bloqueo;
 
         } catch (Exception $e) {
 
@@ -164,45 +164,43 @@ class RecursosRepository
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario): Collection
-{
-    $id_institucion = $id;
+    public function eliminar_recurso($id, $id_recurso, $id_usuario): Collection {
+        $id_institucion = $id;
 
-    // AHORA el repositorio obtiene el nombre de la conexión. Esto soluciona el error.
-    $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
-    
-    DB::connection($conn_name)->beginTransaction();
+        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
-    try {
-        $userIds = RecursoBloqueo::on($conn_name)
-            ->where('ID_Recurso', $id_recurso)
-            ->where('B', 0)
-            ->distinct()
-            ->pluck('ID_Usuario_B');
+        DB::connection($conn_name)->beginTransaction();
 
-        $recursoActualizado = Recurso::on($conn_name)
-            ->where('ID', $id_recurso)
-            ->update(['B' => 1]);
+        try {
+            $userIds = RecursoBloqueo::on($conn_name)
+                ->where('ID_Recurso', $id_recurso)
+                ->where('B', 0)
+                ->distinct()
+                ->pluck('ID_Usuario_B');
 
-        if ($recursoActualizado === 0) {
-            throw new Exception("No se encontró el recurso con ID {$id_recurso} para dar de baja.");
+            $recursoActualizado = Recurso::on($conn_name)
+                ->where('ID', $id_recurso)
+                ->update(['B' => 1]);
+
+            if ($recursoActualizado === 0) {
+                throw new Exception("No se encontró el recurso con ID {$id_recurso} para dar de baja.");
+            }
+
+            RecursoBloqueo::on($conn_name)
+                ->where('ID_Recurso', $id_recurso)
+                ->update([
+                    'B' => 1,
+                    'Fecha_B' => now()->toDateString(),
+                    'Hora_B' => now()->toTimeString(),
+                    'ID_Usuario_B' => $id_usuario
+                ]);
+
+            DB::connection($conn_name)->commit();
+            return $userIds;
+
+        } catch (Exception $e) {
+            DB::connection($conn_name)->rollback();
+            throw $e;
         }
-
-        RecursoBloqueo::on($conn_name)
-            ->where('ID_Recurso', $id_recurso)
-            ->update([
-                'B' => 1,
-                'Fecha_B' => now()->toDateString(),
-                'Hora_B' => now()->toTimeString(),
-                'ID_Usuario_B' => $id_usuario
-            ]);
-
-        DB::connection($conn_name)->commit();
-        return $userIds;
-
-    } catch (Exception $e) {
-        DB::connection($conn_name)->rollback();
-        throw $e;
     }
-}
 }

@@ -57,10 +57,10 @@ class RecursosService
         }
     }
 
-    public function eliminar_bloqueo($id, $id_bloqueo) {
+    public function eliminar_bloqueo($id, $id_bloqueo, $id_usuario) {
         try {
 
-            return $this->RecursosRep->eliminar_bloqueo($id, $id_bloqueo);
+            return $this->RecursosRep->eliminar_bloqueo($id, $id_bloqueo, $id_usuario);
 
         }
         catch(Exception $e) {
@@ -73,10 +73,10 @@ class RecursosService
     {
         $id_institucion = $id;
         try {
-           // $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
-            
+            //$conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
             $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario);
-            
+
             if ($userIds->isNotEmpty()) {
                 $usuarios_a_notificar = User::find($userIds);
                 Notification::send($usuarios_a_notificar, new RecursoCanceladoNotification());
