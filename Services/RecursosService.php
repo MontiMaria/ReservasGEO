@@ -63,4 +63,15 @@ class RecursosService
             throw $e;
         }
     }
+
+    public function verificar_reserva($id, $id_recurso) {
+        try {
+
+            return $this->RecursosRep->verificar_reserva($id, $id_recurso);
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
 }

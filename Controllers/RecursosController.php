@@ -96,8 +96,9 @@ class RecursosController extends Controller
                 'messages' => 'Error en la cancelación de la reserva'.$e->getMessage(),
             ], 500);
         }
+    }
 
-        public function eliminar_bloqueo($id, Request $request) {
+     public function eliminar_bloqueo($id, Request $request) {
 
             $data = $request->all();
     
@@ -119,5 +120,29 @@ class RecursosController extends Controller
                     'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
                 ], 500);
             }
+    }
+
+    public function verificar_reserva($id, Request $request) {
+
+        $data = $request->all();
+
+        try {
+            $informe = $this->RecursosService->verificar_reserva($id, $data['id_recurso']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }
+        catch(Exception $e) {
+            Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la verificación de la reserva'.$e->getMessage(),
+            ], 500);
+        }
     }
 }
