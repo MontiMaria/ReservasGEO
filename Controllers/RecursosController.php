@@ -123,18 +123,18 @@ class RecursosController extends Controller
         }
     }
 
-    public function eliminar_recurso(Request $request, $id)
-    {
+    public function eliminar_recurso(Request $request, $id) {
         try {
             $id_institucion = $id;
             $id_recurso = $request->input('id_recurso');
             $id_usuario = $request->input('id_usuario');
+            $motivo = $request->input('motivo', 'Eliminación de recurso');
 
             if (!$id_recurso || !$id_usuario) {
                 throw new Exception("Los parámetros id_recurso y id_usuario son requeridos.");
             }
 
-            $resultado = $this->RecursosService->eliminar_recurso($id_institucion, $id_recurso, $id_usuario);
+            $resultado = $this->RecursosService->eliminar_recurso($id_institucion, $id_recurso, $id_usuario, $motivo);
 
             return response()->json([
                 'success' => true,

@@ -69,13 +69,12 @@ class RecursosService
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario)
-    {
+    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo) {
         $id_institucion = $id;
         try {
             //$conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
-            $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario);
+            $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario, $motivo);
 
             if ($userIds->isNotEmpty()) {
                 $usuarios_a_notificar = User::find($userIds);

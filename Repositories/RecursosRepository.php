@@ -164,7 +164,7 @@ class RecursosRepository
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario): Collection {
+    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo): Collection {
         $id_institucion = $id;
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
@@ -172,7 +172,7 @@ class RecursosRepository
         DB::connection($conn_name)->beginTransaction();
 
         try {
-            $userIds = RecursoBloqueo::on($conn_name)
+            $userIds = RecursoReserva::on($conn_name)
                 ->where('ID_Recurso', $id_recurso)
                 ->where('B', 0)
                 ->distinct()
@@ -193,6 +193,16 @@ class RecursosRepository
                     'Fecha_B' => now()->toDateString(),
                     'Hora_B' => now()->toTimeString(),
                     'ID_Usuario_B' => $id_usuario
+                ]);
+
+            RecursoReserva::on($conn_name)
+                ->where('ID_Recurso', $id_recurso)
+                ->update([
+                    'B' => 1,
+                    'Fecha_B' => now()->toDateString(),
+                    'Hora_B' => now()->toTimeString(),
+                    'ID_Usuario_B' => $id_usuario,
+                    'B_Motivo' => $motivo
                 ]);
 
             DB::connection($conn_name)->commit();
