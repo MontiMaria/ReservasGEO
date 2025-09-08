@@ -173,4 +173,33 @@ class RecursosController extends Controller
         }
     }
 
+    public function ver_listado_reservas_antiguas($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->ver_listado_reservas_antiguas($id, $data['id_usuario'], $data['id_nivel'], $data['cant_por_pagina'] ?? null, $data['pagina'] ?? null);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }catch (InvalidArgumentException $e) {
+            // Caso específico: rol sin permisos
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => $e->getMessage(),
+            ], 403);
+        }catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la obtencion de reservas históricas' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }

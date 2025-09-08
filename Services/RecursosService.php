@@ -102,4 +102,18 @@ class RecursosService
             ], 500);
         }
     }
+
+    public function ver_listado_reservas_antiguas($id, $id_usuario, $id_nivel, $cant_por_pagina = 15, $pagina = 1)
+    {
+        try {
+            return $this->RecursosRep->ver_listado_reservas_antiguas($id, $id_usuario, $id_nivel, $cant_por_pagina, $pagina);
+        } catch (InvalidArgumentException $e) {
+            throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.",403);
+
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
+        }
+    }
+    
 }
