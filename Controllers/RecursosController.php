@@ -100,39 +100,11 @@ class RecursosController extends Controller
     }
 
     public function agregar_bloqueo($id, Request $request) {
-    }
-
-     public function eliminar_bloqueo($id, Request $request) {
-
-            $data = $request->all();
-    
-            try {
-                $informe = $this->RecursosService->eliminar_bloqueo($id, $data['id_bloqueo'], $data['id_usuario']);
-    
-                return response()->json([
-                    'success' => true,
-                    'data' => $informe,
-                    'messages' => '',
-                ]);
-            }
-            catch(Exception $e) {
-                Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
-    
-                return response()->json([
-                    'success' => false,
-                    'data' => null,
-                    'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
-                ], 500);
-            }
-    }
-
-    public function verificar_reserva($id, Request $request) {
 
         $data = $request->all();
 
         try {
             $informe = $this->RecursosService->agregar_bloqueo($id, $data['id_recurso'], $data['dia_semana'], $data['hi'], $data['hf'], $data['id_nivel'], $data['causa']);
-            $informe = $this->RecursosService->verificar_reserva($id, $data['id_recurso']);
 
             return response()->json([
                 'success' => true,
@@ -156,6 +128,7 @@ class RecursosController extends Controller
         $data = $request->all();
 
         try {
+
             $informe = $this->RecursosService->eliminar_bloqueo($id, $data['id_bloqueo'], $data['id_usuario']);
 
             return response()->json([
@@ -171,6 +144,36 @@ class RecursosController extends Controller
                 'success' => false,
                 'data' => null,
                 'messages' => 'Error en la eliminación del bloqueo'.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function eliminar_recurso(Request $request, $id)
+    {
+        try {
+            $id_institucion = $id;
+            $id_recurso = $request->input('id_recurso');
+            $id_usuario = $request->input('id_usuario');
+
+            if (!$id_recurso || !$id_usuario) {
+                throw new Exception("Los parámetros id_recurso y id_usuario son requeridos.");
+            }
+
+            $resultado = $this->RecursosService->eliminar_recurso($id_institucion, $id_recurso, $id_usuario);
+
+            return response()->json([
+                'success' => true,
+                'data' => $resultado,
+                'messages' => 'El recurso y sus reservas asociadas fueron eliminados correctamente.',
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR al eliminar recurso: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la eliminación del recurso: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -199,6 +202,29 @@ class RecursosController extends Controller
         }
     }
 
+    public function crear_reserva($id, Request $request) {
+
+        $data = $request->all();
+
+        try {
+            $informe = $this->RecursosService->crear_reserva($id, $data['id_recurso'], $data['id_usuario'], $data['fecha_r'], $data['hora_inicio'], $data['hora_fin'], $data['id_nivel'], $data['id_curso'], $data['id_materia'], $data['actividad']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la actualizacion de reservas activas' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function actualizar_reservas_activas($id, Request $request)
     {
         $data = $request->all();
@@ -220,6 +246,7 @@ class RecursosController extends Controller
             ], 500);
         }
     }
+
     public function ver_listado_reservas_activas($id, Request $request)
     {
         $data = $request->all();
@@ -278,9 +305,48 @@ class RecursosController extends Controller
         }
     }
 
-}
-                'messages' => 'Error en la verificación de la reserva'.$e->getMessage(),
+    public function traer_recursos($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->traer_recursos($id, $data['id_usuario'], $data['id_nivel']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la obtencion de recursos' . $e->getMessage(),
             ], 500);
         }
     }
+
+    public function listar_materias($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->listar_materias($id, $data['id_usuario'], $data['id_nivel']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la obtencion de materias' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }

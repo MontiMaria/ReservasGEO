@@ -2,18 +2,22 @@
 
 namespace App\Repositories;
 
+use App\Models\Institucional\Materia;
+use App\Models\Institucional\Personal;
 use App\Models\Institucional\Recurso;
-use App\Models\Institucional\RecursoBloqueo;
-use App\Models\Institucional\RecursoReserva;
 use App\Services\DataBaseService;
 use App\Services\FuncionesService;
 use Carbon\Carbon;
+use App\Models\Institucional\RecursoBloqueo;
+use App\Models\Institucional\RecursoReserva;
+use App\Models\Institucional\Usuario;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
-use Dotenv\Exception\ValidationException;
 use Exception;
 use InvalidArgumentException;
 use DomainException;
+use Dotenv\Exception\ValidationException;
+use Illuminate\Support\Facades\Log;
 
 class RecursosRepository
 {
@@ -67,27 +71,14 @@ class RecursosRepository
                         throw new DomainException("La hora de incio es mayor o igual a la hora de finalizacion");
                     }
 
-                    // Donde 4=Institucional
-                    if($id_nivel == 4 && $b['id_nivel_b'] != $id_nivel) {
-                        $id_nivel_b = $b['id_nivel_b'];
+                    $bloqueo = $nuevo_recurso->bloqueos()->create([
+                        'Dia_Semana' => $dia,
+                        'HI' => $hi,
+                        'HF' => $hf,
+                        'ID_Nivel' => $id_nivel,
+                        'Causa' => $causa
+                    ]);
 
-                        $bloqueo = $nuevo_recurso->bloqueos()->create([
-                            'Dia_Semana' => $dia,
-                            'HI' => $hi,
-                            'HF' => $hf,
-                            'ID_Nivel' => $id_nivel_b,
-                            'Causa' => $causa
-                        ]);
-                    }
-                    else {
-                        $bloqueo = $nuevo_recurso->bloqueos()->create([
-                            'Dia_Semana' => $dia,
-                            'HI' => $hi,
-                            'HF' => $hf,
-                            'ID_Nivel' => $id_nivel,
-                            'Causa' => $causa
-                        ]);
-                    }
                     $bloqueos_cargados[] = $bloqueo->toArray();
                 }
             }
@@ -222,31 +213,43 @@ class RecursosRepository
         }
     }
 
-<<<<<<< HEAD
-    public function actualizar_reservas_activas($id,$id_usuario, $id_nivel){
-
+    public function eliminar_recurso($id, $id_recurso, $id_usuario) {
         $id_institucion = $id;
-        try{
-            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
-            $fechaActual = Carbon::now()->format('Y-m-d');
-            $horaActual = Carbon::now()->format('H:i:s');
 
-            $reservas = RecursoReserva::on($connection)
-                ->where('B','=',0)
-                ->where(function($query) use ($fechaActual, $horaActual, $id_nivel){
-                    $query->where('Fecha_R', '<', $fechaActual)
-                        ->where('ID_Nivel',$id_nivel)
-                        ->orWhere(function($q) use ($fechaActual, $horaActual){
-                            $q->where('Fecha_R',$fechaActual)
-                                ->where('Hora_Fin','<=', $horaActual);
-                        });
-                })
-                ->update(['B' => '1', 'B_Motivo' => 'Reserva expirada']);
+        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
-            return "Reservas actualizadas";
+        DB::connection($conn_name)->beginTransaction();
 
-        } catch(Exception $e) {
-            return $e->getMessage();
+        try {
+            $userIds = RecursoBloqueo::on($conn_name)
+                ->where('ID_Recurso', $id_recurso)
+                ->where('B', 0)
+                ->distinct()
+                ->pluck('ID_Usuario_B');
+
+            $recursoActualizado = Recurso::on($conn_name)
+                ->where('ID', $id_recurso)
+                ->update(['B' => 1]);
+
+            if ($recursoActualizado === 0) {
+                throw new Exception("No se encontró el recurso con ID {$id_recurso} para dar de baja.");
+            }
+
+            RecursoBloqueo::on($conn_name)
+                ->where('ID_Recurso', $id_recurso)
+                ->update([
+                    'B' => 1,
+                    'Fecha_B' => now()->toDateString(),
+                    'Hora_B' => now()->toTimeString(),
+                    'ID_Usuario_B' => $id_usuario
+                ]);
+
+            DB::connection($conn_name)->commit();
+            return $userIds;
+
+        } catch (Exception $e) {
+            DB::connection($conn_name)->rollback();
+            throw $e;
         }
     }
 
@@ -337,12 +340,112 @@ class RecursosRepository
         ];
 
         return $resultado;
-
     }
-    
-    public function ver_listado_reservas_activas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
 
-        $this->actualizar_reservas_activas($id,$id_usuario, $id_nivel);
+    public function crear_reserva($id, $id_recurso, $id_usuario, $fecha_r, $hora_inicio, $hora_fin, $id_nivel, $id_curso, $id_materia, $actividad) {
+        $id_institucion = $id;
+        $now = Carbon::now('America/Argentina/Buenos_Aires');
+        $Fecha_Actual = $now->format('Y-m-d');
+        $Hora_Actual = $now->format('H:i:s');
+
+        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        try {
+            // Parseo y valido la fecha y hora
+            $fecha_reserva = Carbon::createFromFormat('Y-m-d', $fecha_r);
+            $hi = Carbon::createFromFormat('H:i:s', $hora_inicio);
+            $hf = Carbon::createFromFormat('H:i:s', $hora_fin);
+        }
+        catch (Exception $e) {
+            throw new InvalidArgumentException("Formato de fecha/hora inválido: " . $e->getMessage());
+        }
+        if ($hi->gte($hf)) {
+            throw new InvalidArgumentException("La hora de inicio debe ser anterior a la hora de fin de la reserva.");
+        }
+
+        if ($fecha_reserva->lt(Carbon::createFromFormat('Y-m-d', $Fecha_Actual))) {
+            throw new InvalidArgumentException("La fecha de reserva no puede ser anterior a hoy.");
+        }
+
+        DB::connection($conn_name)->beginTransaction();
+
+        try {
+            // Verifico que exista el usuario
+            Usuario::on($conn_name)->findOrFail($id_usuario);
+
+            // Verifico que el recurso sea o de el nivel de el usuario o de la institucion
+            Recurso::on($conn_name)
+                ->where('ID', $id_recurso)
+                ->whereIn('ID_Nivel', [$id_nivel, 4]) // 4 = nivel general
+                ->firstOrFail();
+
+            $reserva = RecursoReserva::on($conn_name)
+                ->create([
+                    'Fecha' => $Fecha_Actual,
+                    'Hora' => $Hora_Actual,
+                    'ID_Recurso' => $id_recurso,
+                    'Fecha_R' => $fecha_r,
+                    'Hora_Inicio' => $hora_inicio,
+                    'Hora_Fin' => $hora_fin,
+                    'ID_Nivel' => $id_nivel,
+                    'ID_Curso' => $id_curso,
+                    'ID_Materia' => $id_materia,
+                    'ID_Docente' => $id_usuario,
+                    'Actividad' => $actividad,
+                    'ID_Usuario_B' => 0,
+                    'B_Motivo' => ''
+                ]);
+
+            DB::connection($conn_name)->commit();
+
+            return $reserva->only([
+                'Fecha',
+                'Hora',
+                'ID_Recurso',
+                'Fecha_R',
+                'Hora_Inicio',
+                'Hora_Fin',
+                'ID_Nivel',
+                'ID_Curso',
+                'ID_Materia',
+                'ID_Docente',
+                'Actividad'
+            ]);
+        }
+        catch(Exception $e) {
+            DB::connection($conn_name)->rollBack();
+            throw $e;
+        }
+    }
+
+    public function actualizar_reservas_activas($id,$id_usuario, $id_nivel){
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            $fechaActual = Carbon::now()->format('Y-m-d');
+            $horaActual = Carbon::now()->format('H:i:s');
+
+            $reservas = RecursoReserva::on($connection)
+                ->where('B','=',0)
+                ->where(function($query) use ($fechaActual, $horaActual, $id_nivel){
+                    $query->where('Fecha_R', '<', $fechaActual)
+                        ->where('ID_Nivel',$id_nivel)
+                        ->orWhere(function($q) use ($fechaActual, $horaActual){
+                            $q->where('Fecha_R',$fechaActual)
+                                ->where('Hora_Fin','<=', $horaActual);
+                        });
+                })
+                ->update(['B' => '1', 'B_Motivo' => 'Reserva expirada']);
+
+            return "Reservas actualizadas";
+
+        } catch(Exception $e) {
+            return $e->getMessage();
+        }
+    }
+
+    public function ver_listado_reservas_activas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
+        $this->actualizar_reservas_activas($id, $id_usuario, $id_nivel);
         $id_institucion = $id;
         try{
             $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
@@ -408,7 +511,7 @@ class RecursosRepository
         }
     }
 
-    public function ver_listado_reservas_antiguas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
+     public function ver_listado_reservas_antiguas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
 
         //verificar la cantidad de consultas a la base de datos
         $this->actualizar_reservas_activas($id,$id_usuario, $id_nivel);
@@ -447,7 +550,7 @@ class RecursosRepository
                     ->orderBy('rr.Fecha_R','desc')
                     ->orderBy('rr.Hora_Inicio','desc');
             } else {
-                throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.",403);
+                throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.", 403);
             }
 
             $resultado = $reservas->paginate($cant_por_pagina,['*'],'pagina', $pagina);
@@ -469,7 +572,7 @@ class RecursosRepository
             ];
             return $data;
 
-        }catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException $e) {
             // Caso específico: rol sin permisos
             throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.",403);
         } catch(Exception $e) {
@@ -477,92 +580,68 @@ class RecursosRepository
             return $e->getMessage();
         }
     }
-}
-=======
-    public function verificar_reserva($id_institucion, $id_recurso)
-    {
-        $connName = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
-        try {
-            // Buscar el recurso y su cantidad disponible
-            $recurso = Recurso::on($connName)->findOrFail($id_recurso);
-            $cantidadDisponible = $recurso->Cantidad ?? 1;
+    public function traer_recursos($id, $id_usuario, $id_nivel){
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            $recursos = Recurso::on($connection)
+                ->select('ID','Recurso','Descripcion','ID_Tipo','ID_Nivel')
+                ->where('ID_Nivel',$id_nivel)
+                ->where('Estado','=','H')
+                ->where('B','=',0)
+                ->get();
 
-            // Traer solo reservas activas posteriores o iguales a la fecha actual, ordenadas por fecha y hora de inicio
-            $hoy = Carbon::now()->format('Y-m-d');
-            $reservas = collect(DB::connection($connName)->table('recursos_reservas')
-                ->where('ID_Recurso', $id_recurso)
-                ->where('B', 0)
-                ->where('Fecha_R', '>=', $hoy)
-                ->orderBy('Fecha_R', 'asc')
-                ->orderBy('Hora_Inicio', 'asc')
-                ->get());
+            $recursos = $recursos->toArray();
+            return $recursos;
 
-            $reservasCanceladas = collect();
 
-            // Crear eventos de inicio y fin para cada reserva
-            $eventos = $reservas->flatMap(function($reserva) {
-                try {
-                    $hi = Carbon::parse($reserva->Hora_Inicio);
-                    $hf = Carbon::parse($reserva->Hora_Fin);
-                } catch (\Exception $e) {
-                    // Si hay error de parseo, ignorar esta reserva
-                    return [];
-                }
+        } catch(Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
+            return $e->getMessage();
+        }
 
-                return [
-                    ['hora' => $hi, 'tipo' => 'inicio', 'reserva' => $reserva],
-                    ['hora' => $hf, 'tipo' => 'fin', 'reserva' => $reserva],
+    }
+
+    public function listar_materias($id, $id_usuario, $id_nivel){
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+            $lista = Materia::on($connection)
+                ->from('materias as m')
+                ->select('m.ID','m.Materia','m.ID_Curso','c.Cursos')
+                ->join('cursos as c','c.ID','=','m.ID_Curso')
+                ->where('m.ID_Nivel',$id_nivel)
+                ->where('c.ID_Nivel',$id_nivel)
+                ->where(function($q) use ($id_usuario){
+                    $q->where('m.ID_Personal',$id_usuario)
+                      //a considerar si el adjunto también puede reservar recursos
+                      ->orWhere('m.ID_Adjunto',$id_usuario);
+                })
+                ->get();
+            if(empty($lista) || $lista->isEmpty()) {
+                return ['Materias' => []];
+            }else{
+
+                $resultado = [
+                    'Materias' => $lista->map(function($item) {
+                        return [
+                            'ID_Materia' => $item->ID,
+                            'ID_Curso' => $item->ID_Curso,
+                            'Materia' => $item->Materia,
+                            'Curso' => $item->Cursos
+                        ];
+                    })->values()->toArray()
                 ];
-            });
 
-            // Ordenar eventos: primero por hora, luego 'inicio' antes que 'fin' si coinciden
-            $eventos = $eventos->sort(function($a, $b) {
-                if ($a['hora']->eq($b['hora'])) {
-                    return $a['tipo'] === 'inicio' ? -1 : 1;
-                }
-                return $a['hora']->lt($b['hora']) ? -1 : 1;
-            })->values();
+                return $resultado;
+            }
 
-            $recursosOcupados = 0;
-            $reservasActivas = collect(); // Reservas actualmente activas
-
-            // Procesar la línea de tiempo de eventos
-            $eventos->each(function($evento) use (&$recursosOcupados, &$reservasActivas, $cantidadDisponible, $id_institucion, &$reservasCanceladas) {
-                if ($evento['tipo'] === 'inicio') {
-                    $recursosOcupados++;
-                    $reservasActivas->push($evento['reserva']);
-
-                    // Si se supera la cantidad disponible, cancelar la última reserva activa
-                    if ($recursosOcupados > $cantidadDisponible) {
-                        $reservaCancelada = $reservasActivas->pop();
-                        // revisar si el mensaje de cancelación es el que se espera
-                        $this->cancelar_reserva(
-                            $id_institucion,
-                            $reservaCancelada->ID,
-                            'Conflicto de recursos por solapamiento horario',
-                            auth()->id()
-                        );
-                        $reservasCanceladas->push($reservaCancelada);
-                        $recursosOcupados--;
-                    }
-                } else { // Evento de fin
-                    $recursosOcupados--;
-                    // Eliminar la reserva de las activas usando filter
-                    $reservasActivas = $reservasActivas->filter(function($reserva) use ($evento) {
-                        return $reserva->ID !== $evento['reserva']->ID;
-                    })->values();
-                }
-            });
-
-            // Retornar las reservas que fueron canceladas por conflicto (sirve para notificar al usuario)
-            return $reservasCanceladas->all();
-
-        } catch (Exception $e) {
-            throw $e;
+        } catch(Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
+            return $e->getMessage();
         }
     }
 
-
 }
->>>>>>> origin/seba

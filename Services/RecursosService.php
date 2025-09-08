@@ -4,15 +4,21 @@ namespace App\Services;
 
 use App\Repositories\RecursosRepository;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
+use App\Notifications\RecursoCanceladoNotification;
 use Exception;
+use Illuminate\Support\Facades\Notification;
+use InvalidArgumentException;
 
 class RecursosService
 {
     private $RecursosRep;
+    protected $dataBaseService;
 
-    function __construct(RecursosRepository $RecursosRep)
+    public function __construct(RecursosRepository $recursosRep, DataBaseService $dataBaseService)
     {
-        $this->RecursosRep = $RecursosRep;
+        $this->RecursosRep = $recursosRep;
+        $this->dataBaseService = $dataBaseService;
     }
 
     public function crear_recurso($id, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos)
@@ -76,26 +82,52 @@ class RecursosService
         }
     }
 
-<<<<<<< HEAD
+    public function eliminar_recurso($id, $id_recurso, $id_usuario)
+    {
+        $id_institucion = $id;
+        try {
+            //$conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+            $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario);
+
+            if ($userIds->isNotEmpty()) {
+                $usuarios_a_notificar = User::find($userIds);
+                Notification::send($usuarios_a_notificar, new RecursoCanceladoNotification());
+            }
+
+            return "El recurso y todas sus reservas han sido eliminados correctamente.";
+
+        } catch (Exception $e) {
+            Log::error("ERROR al eliminar el recurso {$id_recurso}: " . $e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+
     public function ver_lista_recursos($id, $id_nivel, $id_tipo) {
         try {
 
             return $this->RecursosRep->ver_lista_recursos($id, $id_nivel, $id_tipo);
 
-=======
-    public function verificar_reserva($id, $id_recurso) {
-        try {
-
-            return $this->RecursosRep->verificar_reserva($id, $id_recurso);
->>>>>>> origin/seba
         }
         catch(Exception $e) {
             Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
             throw $e;
-<<<<<<< HEAD
+        }
+    }
 
-            
-     public function actualizar_reservas_activas($id, $id_usuario, $id_nivel)
+    public function crear_reserva($id, $id_recurso, $id_usuario, $fecha_r, $hora_inicio, $hora_fin, $id_nivel, $id_curso, $id_materia, $actividad) {
+        try {
+
+            return $this->RecursosRep->crear_reserva($id, $id_recurso, $id_usuario, $fecha_r, $hora_inicio, $hora_fin, $id_nivel, $id_curso, $id_materia, $actividad);
+
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+
+    public function actualizar_reservas_activas($id, $id_usuario, $id_nivel)
     {
         try {
             return $this->RecursosRep->actualizar_reservas_activas($id, $id_usuario, $id_nivel);
@@ -146,10 +178,25 @@ class RecursosService
             return $e;
         }
     }
-    
-}
-=======
+
+
+    public function traer_recursos($id, $id_usuario, $id_nivel)
+    {
+        try {
+            return $this->RecursosRep->traer_recursos($id, $id_usuario, $id_nivel);
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
+        }
+    }
+
+    public function listar_materias($id, $id_usuario, $id_nivel)
+    {
+        try {
+            return $this->RecursosRep->listar_materias($id, $id_usuario, $id_nivel);
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
         }
     }
 }
->>>>>>> origin/seba
