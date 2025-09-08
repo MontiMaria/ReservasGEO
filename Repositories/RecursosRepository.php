@@ -222,6 +222,7 @@ class RecursosRepository
         }
     }
 
+<<<<<<< HEAD
     public function actualizar_reservas_activas($id,$id_usuario, $id_nivel){
 
         $id_institucion = $id;
@@ -477,3 +478,91 @@ class RecursosRepository
         }
     }
 }
+=======
+    public function verificar_reserva($id_institucion, $id_recurso)
+    {
+        $connName = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        try {
+            // Buscar el recurso y su cantidad disponible
+            $recurso = Recurso::on($connName)->findOrFail($id_recurso);
+            $cantidadDisponible = $recurso->Cantidad ?? 1;
+
+            // Traer solo reservas activas posteriores o iguales a la fecha actual, ordenadas por fecha y hora de inicio
+            $hoy = Carbon::now()->format('Y-m-d');
+            $reservas = collect(DB::connection($connName)->table('recursos_reservas')
+                ->where('ID_Recurso', $id_recurso)
+                ->where('B', 0)
+                ->where('Fecha_R', '>=', $hoy)
+                ->orderBy('Fecha_R', 'asc')
+                ->orderBy('Hora_Inicio', 'asc')
+                ->get());
+
+            $reservasCanceladas = collect();
+
+            // Crear eventos de inicio y fin para cada reserva
+            $eventos = $reservas->flatMap(function($reserva) {
+                try {
+                    $hi = Carbon::parse($reserva->Hora_Inicio);
+                    $hf = Carbon::parse($reserva->Hora_Fin);
+                } catch (\Exception $e) {
+                    // Si hay error de parseo, ignorar esta reserva
+                    return [];
+                }
+
+                return [
+                    ['hora' => $hi, 'tipo' => 'inicio', 'reserva' => $reserva],
+                    ['hora' => $hf, 'tipo' => 'fin', 'reserva' => $reserva],
+                ];
+            });
+
+            // Ordenar eventos: primero por hora, luego 'inicio' antes que 'fin' si coinciden
+            $eventos = $eventos->sort(function($a, $b) {
+                if ($a['hora']->eq($b['hora'])) {
+                    return $a['tipo'] === 'inicio' ? -1 : 1;
+                }
+                return $a['hora']->lt($b['hora']) ? -1 : 1;
+            })->values();
+
+            $recursosOcupados = 0;
+            $reservasActivas = collect(); // Reservas actualmente activas
+
+            // Procesar la línea de tiempo de eventos
+            $eventos->each(function($evento) use (&$recursosOcupados, &$reservasActivas, $cantidadDisponible, $id_institucion, &$reservasCanceladas) {
+                if ($evento['tipo'] === 'inicio') {
+                    $recursosOcupados++;
+                    $reservasActivas->push($evento['reserva']);
+
+                    // Si se supera la cantidad disponible, cancelar la última reserva activa
+                    if ($recursosOcupados > $cantidadDisponible) {
+                        $reservaCancelada = $reservasActivas->pop();
+                        // revisar si el mensaje de cancelación es el que se espera
+                        $this->cancelar_reserva(
+                            $id_institucion,
+                            $reservaCancelada->ID,
+                            'Conflicto de recursos por solapamiento horario',
+                            auth()->id()
+                        );
+                        $reservasCanceladas->push($reservaCancelada);
+                        $recursosOcupados--;
+                    }
+                } else { // Evento de fin
+                    $recursosOcupados--;
+                    // Eliminar la reserva de las activas usando filter
+                    $reservasActivas = $reservasActivas->filter(function($reserva) use ($evento) {
+                        return $reserva->ID !== $evento['reserva']->ID;
+                    })->values();
+                }
+            });
+
+            // Retornar las reservas que fueron canceladas por conflicto (sirve para notificar al usuario)
+            return $reservasCanceladas->all();
+
+        } catch (Exception $e) {
+            throw $e;
+        }
+    }
+
+
+}
+>>>>>>> origin/seba

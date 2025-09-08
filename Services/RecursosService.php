@@ -76,15 +76,23 @@ class RecursosService
         }
     }
 
+<<<<<<< HEAD
     public function ver_lista_recursos($id, $id_nivel, $id_tipo) {
         try {
 
             return $this->RecursosRep->ver_lista_recursos($id, $id_nivel, $id_tipo);
 
+=======
+    public function verificar_reserva($id, $id_recurso) {
+        try {
+
+            return $this->RecursosRep->verificar_reserva($id, $id_recurso);
+>>>>>>> origin/seba
         }
         catch(Exception $e) {
             Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
             throw $e;
+<<<<<<< HEAD
 
             
      public function actualizar_reservas_activas($id, $id_usuario, $id_nivel)
@@ -140,3 +148,8 @@ class RecursosService
     }
     
 }
+=======
+        }
+    }
+}
+>>>>>>> origin/seba
