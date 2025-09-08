@@ -176,6 +176,7 @@ Route::put('recursos/actualizar_reservas_activas/{id}', 'RecursosController@actu
 Route::get('recursos/ver_listado_reservas_activas/{id}', 'RecursosController@ver_listado_reservas_activas');
 Route::get('recursos/ver_listado_reservas_antiguas/{id}', 'RecursosController@ver_listado_reservas_antiguas');
 Route::get('recursos/traer_recursos/{id}', 'RecursosController@traer_recursos');
+Route::get('recursos/listar_materias/{id}', 'RecursosController@listar_materias');
 
 
 //Cursos/Materias

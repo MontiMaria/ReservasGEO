@@ -348,4 +348,45 @@ class RecursosRepository
         }
 
     }
+
+     public function listar_materias($id, $id_usuario, $id_nivel){
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+            $lista = Materia::on($connection)
+                ->from('materias as m')
+                ->select('m.ID','m.Materia','m.ID_Curso','c.Cursos')
+                ->join('cursos as c','c.ID','=','m.ID_Curso')
+                ->where('m.ID_Nivel',$id_nivel)
+                ->where('c.ID_Nivel',$id_nivel)
+                ->where(function($q) use ($id_usuario){
+                    $q->where('m.ID_Personal',$id_usuario)
+                      //a considerar si el adjunto también puede reservar recursos
+                      ->orWhere('m.ID_Adjunto',$id_usuario);
+                })
+                ->get();
+            if(empty($lista) || $lista->isEmpty()) {
+                return ['Materias' => []];
+            }else{
+
+                $resultado = [
+                    'Materias' => $lista->map(function($item) {
+                        return [
+                            'ID_Materia' => $item->ID,
+                            'ID_Curso' => $item->ID_Curso,
+                            'Materia' => $item->Materia,
+                            'Curso' => $item->Cursos
+                        ];
+                    })->values()->toArray()
+                ];
+
+                return $resultado;
+            }
+
+        } catch(Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
+            return $e->getMessage();
+        }
+    }
 }

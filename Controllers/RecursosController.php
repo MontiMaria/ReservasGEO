@@ -224,4 +224,26 @@ class RecursosController extends Controller
         }
     }
 
+    public function listar_materias($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->listar_materias($id, $data['id_usuario'], $data['id_nivel']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la obtencion de materias' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }

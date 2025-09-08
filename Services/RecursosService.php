@@ -126,4 +126,14 @@ class RecursosService
             return $e;
         }
     }
+
+    public function listar_materias($id, $id_usuario, $id_nivel)
+    {
+        try {
+            return $this->RecursosRep->listar_materias($id, $id_usuario, $id_nivel);
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
+        }
+    }
 }
