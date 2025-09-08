@@ -336,5 +336,144 @@ class RecursosRepository
         ];
 
         return $resultado;
+
+    }
+    
+    public function ver_listado_reservas_activas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
+
+        $this->actualizar_reservas_activas($id,$id_usuario, $id_nivel);
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            $rol = Personal::on($connection)
+                ->select('Tipo')
+                ->where('ID',$id_usuario)
+                ->first();
+            $cant_por_pagina = $cant_por_pagina ?? 15;
+            $pagina = $pagina ?? 1;
+
+            if($rol->Tipo == 'DI'){
+                $reservas = RecursoReserva::on($connection)
+                    ->from('recursos_reservas as rr')
+                    ->select('recursos.Recurso','rr.*','personal.Nombre','personal.Apellido')
+                    ->join('recursos','recursos.ID','=','rr.ID_Recurso')
+                    ->join('personal','personal.ID','=','rr.ID_Docente')
+                    //se le podría agregar un join con materias para que traiga el nombre de la materia también
+                    //->join('materias','materias.ID','=','rr.ID_Materia')
+                    ->where('rr.B','=',0)
+                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->orderBy('rr.Fecha_R','asc')
+                    ->orderBy('rr.Hora_Inicio','asc');
+            } elseif (in_array($rol->Tipo, ['PF', 'MI', 'MG'])) {
+                $reservas = RecursoReserva::on($connection)
+                    ->from('recursos_reservas as rr')
+                    ->select('recursos.Recurso','rr.*')
+                    ->join('recursos','recursos.ID','=','rr.ID_Recurso')
+                    //se le podría agregar un join con materias para que traiga el nombre de la materia también
+                    //->join('materias','materias.ID','=','rr.ID_Materia')
+                    ->where('rr.B','=',0)
+                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->where('rr.ID_Docente',$id_usuario)
+                    ->orderBy('rr.Fecha_R','asc')
+                    ->orderBy('rr.Hora_Inicio','asc');
+            } else {
+                throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas activas.",403);
+            }
+
+            $resultado = $reservas->paginate($cant_por_pagina,['*'],'pagina', $pagina);
+
+            $data = [
+                'data' => $resultado->items(),
+                'meta' => [
+                    'total' => $resultado->total(),
+                    'current_page' => $resultado->currentPage(),
+                    'per_page' => $resultado->perPage(),
+                    'last_page' => $resultado->lastPage(),
+                ],
+                'links' => [
+                    'first' => $resultado->url(1),
+                    'last' => $resultado->url($resultado->lastPage()),
+                    'prev' => $resultado->previousPageUrl(),
+                    'next' => $resultado->nextPageUrl(),
+                ]
+            ];
+            return $data;
+        } catch (InvalidArgumentException $e) {
+            // Caso específico: rol sin permisos
+            throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas activas.",403);
+        } catch(Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
+            return $e->getMessage();
+        }
+    }
+
+    public function ver_listado_reservas_antiguas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
+
+        //verificar la cantidad de consultas a la base de datos
+        $this->actualizar_reservas_activas($id,$id_usuario, $id_nivel);
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            $rol = Personal::on($connection)
+                ->select('Tipo')
+                ->where('ID',$id_usuario)
+                ->first();
+            $cant_por_pagina = $cant_por_pagina ?? 15;
+            $pagina = $pagina ?? 1;
+
+            if($rol->Tipo == 'DI'){
+                $reservas = RecursoReserva::on($connection)
+                    ->from('recursos_reservas as rr')
+                    ->select('recursos.Recurso','rr.*','personal.Nombre','personal.Apellido')
+                    ->join('recursos','recursos.ID','=','rr.ID_Recurso')
+                    ->join('personal','personal.ID','=','rr.ID_Docente')
+                    //se le podría agregar un join con materias para que traiga el nombre de la materia también
+                    //->join('materias','materias.ID','=','rr.ID_Materia')
+                    ->where('rr.B','=',1)
+                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->orderBy('rr.Fecha_R','desc')
+                    ->orderBy('rr.Hora_Inicio','desc');
+            } elseif (in_array($rol->Tipo, ['PF', 'MI', 'MG'])) {
+                $reservas = RecursoReserva::on($connection)
+                    ->from('recursos_reservas as rr')
+                    ->select('recursos.Recurso','rr.*')
+                    ->join('recursos','recursos.ID','=','rr.ID_Recurso')
+                    //se le podría agregar un join con materias para que traiga el nombre de la materia también
+                    //->join('materias','materias.ID','=','rr.ID_Materia')
+                    ->where('rr.B','=',1)
+                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->where('rr.ID_Docente',$id_usuario)
+                    ->orderBy('rr.Fecha_R','desc')
+                    ->orderBy('rr.Hora_Inicio','desc');
+            } else {
+                throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.",403);
+            }
+
+            $resultado = $reservas->paginate($cant_por_pagina,['*'],'pagina', $pagina);
+
+            $data = [
+                'data' => $resultado->items(),
+                'meta' => [
+                    'total' => $resultado->total(),
+                    'current_page' => $resultado->currentPage(),
+                    'per_page' => $resultado->perPage(),
+                    'last_page' => $resultado->lastPage(),
+                ],
+                'links' => [
+                    'first' => $resultado->url(1),
+                    'last' => $resultado->url($resultado->lastPage()),
+                    'prev' => $resultado->previousPageUrl(),
+                    'next' => $resultado->nextPageUrl(),
+                ]
+            ];
+            return $data;
+
+        }catch (InvalidArgumentException $e) {
+            // Caso específico: rol sin permisos
+            throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.",403);
+        } catch(Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
+            return $e->getMessage();
+        }
     }
 }

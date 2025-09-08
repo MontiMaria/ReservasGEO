@@ -175,6 +175,8 @@ Route::delete('recursos/cancelar_reserva/{id}', 'RecursosController@cancelar_res
 Route::delete('recursos/eliminar_bloqueo/{id}', 'RecursosController@eliminar_bloqueo');
 Route::get('recursos/ver_lista_recursos/{id}', 'RecursosController@ver_lista_recursos');
 Route::put('recursos/actualizar_reservas_activas/{id}', 'RecursosController@actualizar_reservas_activas');
+Route::get('recursos/ver_listado_reservas_activas/{id}', 'RecursosController@ver_listado_reservas_activas');
+Route::get('recursos/ver_listado_reservas_antiguas/{id}', 'RecursosController@ver_listado_reservas_antiguas');
 
 //Cursos/Materias
 Route::get('cursos/lista_alumnos/{id}', 'CursosController@lista_alumnos');

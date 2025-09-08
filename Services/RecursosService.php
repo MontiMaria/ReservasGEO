@@ -96,4 +96,47 @@ class RecursosService
             return $e;
         }
     }
+
+    public function ver_listado_reservas_activas($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->ver_listado_reservas_activas($id, $data['id_usuario'], $data['id_nivel'], $data['cant_por_pagina'] ?? null, $data['pagina'] ?? null);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }catch (InvalidArgumentException $e) {
+            // Caso específico: rol sin permisos
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => $e->getMessage(),
+            ], 403);
+        }catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la obtencion de reservas activas' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function ver_listado_reservas_antiguas($id, $id_usuario, $id_nivel, $cant_por_pagina = 15, $pagina = 1)
+    {
+        try {
+            return $this->RecursosRep->ver_listado_reservas_antiguas($id, $id_usuario, $id_nivel, $cant_por_pagina, $pagina);
+        } catch (InvalidArgumentException $e) {
+            throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.",403);
+
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
+        }
+    }
+    
 }
