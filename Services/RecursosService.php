@@ -116,4 +116,14 @@ class RecursosService
         }
     }
     
+
+    public function traer_recursos($id, $id_usuario, $id_nivel)
+    {
+        try {
+            return $this->RecursosRep->traer_recursos($id, $id_usuario, $id_nivel);
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
+        }
+    }
 }

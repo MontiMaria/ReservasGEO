@@ -325,4 +325,27 @@ class RecursosRepository
             return $e->getMessage();
         }
     }
+
+
+    public function traer_recursos($id, $id_usuario, $id_nivel){
+        $id_institucion = $id;
+        try{
+            $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
+            $recursos = Recurso::on($connection)
+                ->select('ID','Recurso','Descripcion','ID_Tipo','ID_Nivel')
+                ->where('ID_Nivel',$id_nivel)
+                ->where('Estado','=','H')
+                ->where('B','=',0)
+                ->get();
+
+            $recursos = $recursos->toArray();
+            return $recursos;
+
+
+        } catch(Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
+            return $e->getMessage();
+        }
+
+    }
 }

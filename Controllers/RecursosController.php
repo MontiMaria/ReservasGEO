@@ -202,4 +202,26 @@ class RecursosController extends Controller
         }
     }
 
+    public function traer_recursos($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->traer_recursos($id, $data['id_usuario'], $data['id_nivel']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la obtencion de recursos' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 }
