@@ -115,6 +115,7 @@ class RecursosRepository
 
     public function cancelar_reserva($id, $id_reserva, $motivo, $id_usuario) {
         $id_institucion = $id;
+        $datetimeArg = Carbon::now('America/Argentina/Buenos_Aires');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
         DB::connection($conn_name)->beginTransaction();
@@ -124,8 +125,8 @@ class RecursosRepository
 
             $reserva->B = 1;
             $reserva->B_Motivo = $motivo;
-            $reserva->Fecha_B = now()->toDateString();
-            $reserva->Hora_B = now()->toTimeString();
+            $reserva->Fecha_B = $datetimeArg;
+            $reserva->Hora_B = $datetimeArg;
             $reserva->ID_Usuario_B = $id_usuario;
             $reserva->save();
 
@@ -141,6 +142,7 @@ class RecursosRepository
 
     public function eliminar_bloqueo($id, $id_bloqueo, $id_usuario) {
         $id_institucion = $id;
+        $datetimeArg = Carbon::now('America/Argentina/Buenos_Aires');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
         DB::connection($conn_name)->beginTransaction();
@@ -149,8 +151,8 @@ class RecursosRepository
             $bloqueo = RecursoBloqueo::on($conn_name)->findOrFail($id_bloqueo);
 
             $bloqueo->B = 1;
-            $bloqueo->Fecha_B = now()->toDateString();
-            $bloqueo->Hora_B = now()->toTimeString();
+            $bloqueo->Fecha_B = $datetimeArg;
+            $bloqueo->Hora_B = $datetimeArg;
             $bloqueo->ID_Usuario_B = $id_usuario;
             $bloqueo->save();
 
@@ -166,6 +168,7 @@ class RecursosRepository
 
     public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo): Collection {
         $id_institucion = $id;
+        $datetimeArg = Carbon::now('America/Argentina/Buenos_Aires');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
@@ -190,8 +193,8 @@ class RecursosRepository
                 ->where('ID_Recurso', $id_recurso)
                 ->update([
                     'B' => 1,
-                    'Fecha_B' => now()->toDateString(),
-                    'Hora_B' => now()->toTimeString(),
+                    'Fecha_B' => $datetimeArg,
+                    'Hora_B' => $datetimeArg,
                     'ID_Usuario_B' => $id_usuario
                 ]);
 
@@ -199,8 +202,8 @@ class RecursosRepository
                 ->where('ID_Recurso', $id_recurso)
                 ->update([
                     'B' => 1,
-                    'Fecha_B' => now()->toDateString(),
-                    'Hora_B' => now()->toTimeString(),
+                    'Fecha_B' => $datetimeArg,
+                    'Hora_B' => $datetimeArg,
                     'ID_Usuario_B' => $id_usuario,
                     'B_Motivo' => $motivo
                 ]);
