@@ -17,6 +17,7 @@ use Exception;
 use InvalidArgumentException;
 use DomainException;
 use Dotenv\Exception\ValidationException;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Log;
 
 class RecursosRepository
@@ -31,11 +32,21 @@ class RecursosRepository
     }
 
 
-    public function crear_recurso($id, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos) {
+    public function crear_recurso($id, $id_usuario, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos) {
         $id_institucion = $id;
         $bloqueos_cargados = [];
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la creacion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
+
         DB::connection($conn_name)->beginTransaction();
 
         try {
@@ -100,10 +111,16 @@ class RecursosRepository
         $id_institucion = $id;
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
         DB::connection($conn_name)->beginTransaction();
 
         try {
             $recurso = Recurso::on($conn_name)->findOrFail($id_recurso);
+
+            // Verificamos la cantidad
+            if($cantidad < 0) {
+                throw new InvalidArgumentException("La cantidad ingresada es menor a 0");
+            }
 
             $recurso->Cantidad = $cantidad;
             $recurso->save();
@@ -120,8 +137,21 @@ class RecursosRepository
 
     public function cancelar_reserva($id, $id_reserva, $motivo, $id_usuario) {
         $id_institucion = $id;
+        $now = Carbon::now('America/Argentina/Buenos_Aires');
+        $Fecha_Actual = $now->format('Y-m-d');
+        $Hora_Actual = $now->format('H:i:s');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la creacion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['PF', 'MG', 'MI'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
+
         DB::connection($conn_name)->beginTransaction();
 
         try {
@@ -129,8 +159,8 @@ class RecursosRepository
 
             $reserva->B = 1;
             $reserva->B_Motivo = $motivo;
-            $reserva->Fecha_B = now()->toDateString();
-            $reserva->Hora_B = now()->toTimeString();
+            $reserva->Fecha_B = $Fecha_Actual;
+            $reserva->Hora_B = $Hora_Actual;
             $reserva->ID_Usuario_B = $id_usuario;
             $reserva->save();
 
@@ -144,16 +174,26 @@ class RecursosRepository
         }
     }
 
-    public function agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa) {
+    public function agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa, $id_usuario) {
         $id_institucion = $id;
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la accion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
+
         DB::connection($conn_name)->beginTransaction();
 
         try {
             $consulta_recurso = Recurso::on($conn_name)->findOrFail($id_recurso);
 
-            if($consulta_recurso->ID_Nivel != $id_nivel && $consulta_recurso->ID_Nivel != 4) {
+            if($consulta_recurso->ID_Nivel != $id_nivel && $consulta_recurso->ID_Nivel != 0) {
                 throw new ValidationException("El nivel ingresado no es valido para el bloqueo del recurso");
             }
             if($dia_semana < 1 || $dia_semana > 5) {
@@ -190,16 +230,29 @@ class RecursosRepository
 
     public function eliminar_bloqueo($id, $id_bloqueo, $id_usuario) {
         $id_institucion = $id;
+        $now = Carbon::now('America/Argentina/Buenos_Aires');
+        $Fecha_Actual = $now->format('Y-m-d');
+        $Hora_Actual = $now->format('H:i:s');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la accion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
+
         DB::connection($conn_name)->beginTransaction();
 
         try {
             $bloqueo = RecursoBloqueo::on($conn_name)->findOrFail($id_bloqueo);
 
             $bloqueo->B = 1;
-            $bloqueo->Fecha_B = now()->toDateString();
-            $bloqueo->Hora_B = now()->toTimeString();
+            $bloqueo->Fecha_B = $Fecha_Actual;
+            $bloqueo->Hora_B = $Hora_Actual;
             $bloqueo->ID_Usuario_B = $id_usuario;
             $bloqueo->save();
 
@@ -350,6 +403,14 @@ class RecursosRepository
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
+        // Verifico que el usuario que realiza la creacion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['PF', 'MG', 'MI'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
         try {
             // Parseo y valido la fecha y hora
             $fecha_reserva = Carbon::createFromFormat('Y-m-d', $fecha_r);
@@ -366,6 +427,7 @@ class RecursosRepository
         if ($fecha_reserva->lt(Carbon::createFromFormat('Y-m-d', $Fecha_Actual))) {
             throw new InvalidArgumentException("La fecha de reserva no puede ser anterior a hoy.");
         }
+
 
         DB::connection($conn_name)->beginTransaction();
 
@@ -642,6 +704,98 @@ class RecursosRepository
             Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
             return $e->getMessage();
         }
+    }
+
+    public function verificarReservas($id, $id_recurso, $nuevaCantidad)
+    {
+        $id_institucion = $id;
+        $Fecha_Actual = Carbon::now('America/Argentina/Buenos_Aires')->format("Y-m-d");
+        $resultado = [];
+
+        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        if($nuevaCantidad < 0) {
+            throw new InvalidArgumentException("La cantidad ingresada es menor a 0");
+        }
+
+        // Traer todas las reservas de hoy a futuro
+        $reservas = RecursoReserva::on($conn_name)
+            ->select('ID', "Fecha", "Hora", 'Fecha_R', 'Hora_Inicio', 'Hora_Fin')
+            ->where('ID_Recurso', $id_recurso)
+            ->where('B', 0)
+            ->where('Fecha_R', '>=', $Fecha_Actual)
+            ->orderBy('Fecha_R')
+            ->orderBy('Hora_Inicio')
+            ->get();
+
+        // Si no hay reservas simplemente actualizamos la cantidad
+        if($reservas->isEmpty()) {
+            $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad);
+
+            return [
+                'conflicto' => false,
+                'detalles' => $resultado
+            ];
+        }
+
+        foreach ($reservas->groupBy('Fecha_R') as $fecha => $reservas_dia) {
+            // Inicializar slots para esa fecha
+            $slots = [];
+            for ($h = 7; $h < 17; $h++) {
+                $slots["$h:00-".($h+1).":00"] = [];
+            }
+
+            // Contar reservas por franja horaria en los slots
+            foreach ($reservas_dia as $reserva) {
+                $hi = $reserva->Hora_Inicio->hour;
+                $hf = $reserva->Hora_Fin->hour;
+                for ($h = $hi; $h < $hf; $h++) {
+                    $key = "$h:00-".($h+1).":00";
+                    if (isset($slots[$key])) {
+                        $slots[$key][] = [
+                            'reservas_id' => $reserva->ID,
+                            'fecha' => $reserva->Fecha,
+                            'hora' => $reserva->Hora,
+                        ];
+                    }
+                }
+            }
+
+            // Guardar los slots que superen la nueva cantidad
+            foreach ($slots as $slot => $reservas_slot) {
+                $count = count($reservas_slot);
+                if($count > $nuevaCantidad) {
+                    // Ordenamos el array para que nos queden los candidatos a eliminar
+                    usort($reservas_slot, function($a, $b) {
+                        // Se podrian agregar mas condiciones como que la Fecha_R y Hora_Inicio mas futura
+                        if ($a['fecha']->eq($b['fecha'])) {
+                            return $a['hora']->eq($b['hora']) ? 0 : ($a['hora']->lt($b['hora']) ? -1 : 1);
+                        }
+                        return $a['fecha']->lt($b['fecha']) ? -1 : 1;
+                    });
+
+                    $respuesta = array_slice($reservas_slot, 0, $count - $nuevaCantidad);
+
+                    $resultado[] = [
+                        'fecha' => $fecha,
+                        'slot' => $slot,
+                        'reservas' => $count,
+                        'exceso' => $count - $nuevaCantidad,
+                        'ids' => array_column($respuesta, 'reservas_id')
+                    ];
+                }
+            }
+        }
+
+        // Si no hay resultados, actualizamos la cantidad
+        if (empty($resultado)) {
+            $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad);
+        }
+
+        return [
+            'conflicto' => !empty($resultado),
+            'detalles' => $resultado
+        ];
     }
 
 }

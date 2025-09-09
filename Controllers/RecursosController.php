@@ -32,7 +32,7 @@ class RecursosController extends Controller
         }
 
         try {
-            $informe = $this->RecursosService->crear_recurso($id, $data['recurso'], $data['cantidad'], $data['descripcion'], $data['id_tipo'], $data['id_nivel'], $bloqueos);
+            $informe = $this->RecursosService->crear_recurso($id, $data['id_usuario'], $data['recurso'], $data['cantidad'], $data['descripcion'], $data['id_tipo'], $data['id_nivel'], $bloqueos);
 
             return response()->json([
                 'success' => true,
@@ -104,7 +104,7 @@ class RecursosController extends Controller
         $data = $request->all();
 
         try {
-            $informe = $this->RecursosService->agregar_bloqueo($id, $data['id_recurso'], $data['dia_semana'], $data['hi'], $data['hf'], $data['id_nivel'], $data['causa']);
+            $informe = $this->RecursosService->agregar_bloqueo($id, $data['id_recurso'], $data['dia_semana'], $data['hi'], $data['hf'], $data['id_nivel'], $data['causa'], $data['id_usuario']);
 
             return response()->json([
                 'success' => true,
@@ -345,6 +345,28 @@ class RecursosController extends Controller
                 'success' => false,
                 'data' => null,
                 'messages' => 'Error en la obtencion de materias' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function verificarReservas($id, Request $request)
+    {
+        $data = $request->all();
+        try {
+            $informe = $this->RecursosService->verificarReservas($id, $data['id_recurso'], $data['nuevaCantidad']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        } catch (Exception $e) {
+            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la verificacion de materias' . $e->getMessage(),
             ], 500);
         }
     }

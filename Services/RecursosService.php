@@ -21,11 +21,11 @@ class RecursosService
         $this->dataBaseService = $dataBaseService;
     }
 
-    public function crear_recurso($id, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos)
+    public function crear_recurso($id, $id_usuario, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos)
     {
         try {
 
-            return $this->RecursosRep->crear_recurso($id, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos);
+            return $this->RecursosRep->crear_recurso($id, $id_usuario, $recurso, $cantidad, $descripcion, $id_tipo, $id_nivel, $bloqueos);
 
         }
         catch(Exception $e) {
@@ -58,10 +58,10 @@ class RecursosService
         }
     }
 
-    public function agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa) {
+    public function agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa, $id_usuario) {
         try {
 
-            return $this->RecursosRep->agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa);
+            return $this->RecursosRep->agregar_bloqueo($id, $id_recurso, $dia_semana, $hi, $hf, $id_nivel, $causa, $id_usuario);
 
         }
         catch(Exception $e) {
@@ -137,32 +137,16 @@ class RecursosService
         }
     }
 
-    public function ver_listado_reservas_activas($id, Request $request)
+    public function ver_listado_reservas_activas($id, $id_usuario, $id_nivel, $cant_por_pagina, $pagina)
     {
-        $data = $request->all();
-        try {
-            $informe = $this->RecursosService->ver_listado_reservas_activas($id, $data['id_usuario'], $data['id_nivel'], $data['cant_por_pagina'] ?? null, $data['pagina'] ?? null);
+         try {
+            return $this->RecursosRep->ver_listado_reservas_activas($id, $id_usuario, $id_nivel, $cant_por_pagina, $pagina);
+        } catch (InvalidArgumentException $e) {
+            throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas activas.",403);
 
-            return response()->json([
-                'success' => true,
-                'data' => $informe,
-                'messages' => '',
-            ]);
-        }catch (InvalidArgumentException $e) {
-            // Caso específico: rol sin permisos
-            return response()->json([
-                'success' => false,
-                'data' => null,
-                'messages' => $e->getMessage(),
-            ], 403);
-        }catch (Exception $e) {
-            Log::error("CONTROLLER ERROR: " . $e->getMessage(), ['exception' => $e]);
-
-            return response()->json([
-                'success' => false,
-                'data' => null,
-                'messages' => 'Error en la obtencion de reservas activas' . $e->getMessage(),
-            ], 500);
+        } catch (Exception $e) {
+            Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine(), ['exception' => $e]);
+            return $e;
         }
     }
 
@@ -199,4 +183,18 @@ class RecursosService
             return $e;
         }
     }
+
+    public function verificarReservas($id, $id_recurso, $nuevaCantidad)
+    {
+        try {
+
+            return $this->RecursosRep->verificarReservas($id, $id_recurso, $nuevaCantidad);
+
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
 }
+
