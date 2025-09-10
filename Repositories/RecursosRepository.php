@@ -8,6 +8,7 @@ use App\Services\FuncionesService;
 use Carbon\Carbon;
 use App\Models\Institucional\RecursoBloqueo;
 use App\Models\Institucional\RecursoReserva;
+use App\Models\Institucional\RecursoLectura;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Exception;
@@ -166,21 +167,15 @@ class RecursosRepository
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo): Collection {
+    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo)
+    {
         $id_institucion = $id;
         $datetimeArg = Carbon::now('America/Argentina/Buenos_Aires');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
-
         DB::connection($conn_name)->beginTransaction();
 
         try {
-            $userIds = RecursoReserva::on($conn_name)
-                ->where('ID_Recurso', $id_recurso)
-                ->where('B', 0)
-                ->distinct()
-                ->pluck('ID_Usuario_B');
-
             $recursoActualizado = Recurso::on($conn_name)
                 ->where('ID', $id_recurso)
                 ->update(['B' => 1]);
@@ -198,9 +193,13 @@ class RecursosRepository
                     'ID_Usuario_B' => $id_usuario
                 ]);
 
-            RecursoReserva::on($conn_name)
+            $reservasActivas = RecursoReserva::on($conn_name)
                 ->where('ID_Recurso', $id_recurso)
-                ->update([
+                ->where('B', 0)
+                ->get();
+
+            foreach ($reservasActivas as $reserva) {
+                $reserva->update([
                     'B' => 1,
                     'Fecha_B' => $datetimeArg,
                     'Hora_B' => $datetimeArg,
@@ -208,8 +207,15 @@ class RecursosRepository
                     'B_Motivo' => $motivo
                 ]);
 
+                RecursoLectura::on($conn_name)->create([
+                    'ID_Recurso' => $reserva->ID_Recurso,
+                    'ID_Usuario' => $reserva->ID_Usuario,
+                    'Fecha' => $datetimeArg,
+                    'Hora' => $datetimeArg,
+                    'Leido' => 0
+                ]);
+            }
             DB::connection($conn_name)->commit();
-            return $userIds;
 
         } catch (Exception $e) {
             DB::connection($conn_name)->rollback();

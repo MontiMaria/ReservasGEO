@@ -69,19 +69,11 @@ class RecursosService
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo) {
-        $id_institucion = $id;
+    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo) 
+    {
         try {
-            //$conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
-
-            $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario, $motivo);
-
-            if ($userIds->isNotEmpty()) {
-                $usuarios_a_notificar = User::find($userIds);
-                Notification::send($usuarios_a_notificar, new RecursoCanceladoNotification());
-            }
-
-            return "El recurso y todas sus reservas han sido eliminados correctamente.";
+            
+            return $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario, $motivo);
 
         } catch (Exception $e) {
             Log::error("ERROR al eliminar el recurso {$id_recurso}: " . $e->getMessage(), ['exception' => $e]);

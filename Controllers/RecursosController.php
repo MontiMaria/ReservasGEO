@@ -124,30 +124,30 @@ class RecursosController extends Controller
     }
 
     public function eliminar_recurso(Request $request, $id) {
-        try {
-            $id_institucion = $id;
-            $id_recurso = $request->input('id_recurso');
-            $id_usuario = $request->input('id_usuario');
-            $motivo = $request->input('motivo', 'Eliminación de recurso');
 
-            if (!$id_recurso || !$id_usuario) {
+        $data = $request->all();
+
+        try {
+            if (!isset($data['id_recurso']) || !isset($data['id_usuario'])) {
                 throw new Exception("Los parámetros id_recurso y id_usuario son requeridos.");
             }
 
-            $resultado = $this->RecursosService->eliminar_recurso($id_institucion, $id_recurso, $id_usuario, $motivo);
+            $motivo = $data['motivo'] ?? 'Eliminación de recurso por administrador.';
+
+            $informe = $this->RecursosService->eliminar_recurso($id, $data['id_recurso'], $data['id_usuario'], $motivo);
 
             return response()->json([
-                'success' => true,
-                'data' => $resultado,
-                'messages' => 'El recurso y sus reservas asociadas fueron eliminados correctamente.',
-            ], 200);
+                'success'  => true,
+                'data'     => $informe, 
+                'messages' => '',          
+            ]);
 
         } catch (Exception $e) {
-            Log::error("CONTROLLER ERROR al eliminar recurso: ".$e->getMessage(), ['exception' => $e]);
+            Log::error("CONTROLLER ERROR al eliminar recurso: " . $e->getMessage(), ['exception' => $e]);
 
             return response()->json([
-                'success' => false,
-                'data' => null,
+                'success'  => false,
+                'data'     => null,
                 'messages' => 'Error en la eliminación del recurso: ' . $e->getMessage(),
             ], 500);
         }

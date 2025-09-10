@@ -20,8 +20,8 @@ class CreateRecursosTable extends Migration
                 $table->string("Recurso", 100);
                 $table->integer("Cantidad"); // Nuevo campo
                 $table->text("Descripcion");
-                $table->integer("ID_Tipo") // ID tabla recursos_tipos (No exsiste)
-                    ->comment("ID tabla recursos_tipos (No exsiste)");
+                $table->integer("ID_Tipo") // ID tabla recursos_tipos (No existe)
+                    ->comment("ID tabla recursos_tipos (No existe)");
                 $table->integer("ID_Nivel") // ID tabla nivel
                     ->comment("ID tabla nivel");
                 $table->string("Estado", 1)->default("H") // Propongo eliminarlo
