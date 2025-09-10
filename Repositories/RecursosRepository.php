@@ -74,12 +74,20 @@ class RecursosRepository
                     try {
                         $hi_p = Carbon::parse($hi);
                         $hf_p = Carbon::parse($hf);
+
+                        $hi_min = Carbon::createFromTime(7, 0, 0);
+                        $hi_max = Carbon::createFromTime(16, 0, 0);
+                        $hf_min = Carbon::createFromTime(8, 0, 0);
+                        $hf_max = Carbon::createFromTime(17, 0, 0);
                     }
                     catch (Exception $e) {
                         throw new InvalidArgumentException("Formato de hora inválido.");
                     }
                     if($hi_p >= $hf_p) {
                         throw new DomainException("La hora de incio es mayor o igual a la hora de finalizacion");
+                    }
+                    if((!$hi_p->between($hi_min, $hi_max)) || (!$hf_p->between($hf_min, $hf_max))) {
+                        throw new InvalidArgumentException("El valor ingresado se encuentra fuera del rango horario de las reservas");
                     }
 
                     $bloqueo = $nuevo_recurso->bloqueos()->create([
@@ -121,6 +129,11 @@ class RecursosRepository
             if($cantidad < 0) {
                 throw new InvalidArgumentException("La cantidad ingresada es menor a 0");
             }
+            /* Se podria agregar una verificacion para los recursos de tipo Espacio comun
+            if($recurso->ID_Nivel == 3 && ($cantidad >= 0 && $cantidad <= 1)) {
+                throw new Exception("No se puede aumentar la cantidad de las aulas en mas de 1");
+            }
+            */
 
             $recurso->Cantidad = $cantidad;
             $recurso->save();
@@ -202,12 +215,20 @@ class RecursosRepository
             try {
                 $hi_p = Carbon::parse($hi);
                 $hf_p = Carbon::parse($hf);
+
+                $hi_min = Carbon::createFromTime(7, 0, 0);
+                $hi_max = Carbon::createFromTime(16, 0, 0);
+                $hf_min = Carbon::createFromTime(8, 0, 0);
+                $hf_max = Carbon::createFromTime(17, 0, 0);
             }
             catch (Exception $e) {
                 throw new InvalidArgumentException("Formato de hora inválido.");
             }
             if($hi_p >= $hf_p) {
                 throw new DomainException("La hora de incio es mayor o igual a la hora de finalizacion");
+            }
+            if((!$hi_p->between($hi_min, $hi_max)) || (!$hf_p->between($hf_min, $hf_max))) {
+                throw new InvalidArgumentException("El valor ingresado se encuentra fuera del rango horario de las reservas");
             }
 
             $resultado = $consulta_recurso->bloqueos()->create([
@@ -323,14 +344,14 @@ class RecursosRepository
                 ->where("B", 0)
                 ->where(function($q) use ($id_nivel) {
                     $q->where("ID_Nivel", $id_nivel)
-                    ->orWhere("ID_Nivel" , 4);
+                    ->orWhere("ID_Nivel" , 0);
                 })
                 ->with(["bloqueos" => function($q) use ($id_nivel) {
                     $q->select("ID", "ID_Recurso", "Dia_Semana", "HI", "HF", "ID_Nivel", "Causa")
                     ->where("B", 0)
                     ->where(function($q2) use ($id_nivel) {
                         $q2->where("ID_Nivel", $id_nivel)
-                        ->orWhere("ID_Nivel" , 4);
+                        ->orWhere("ID_Nivel" , 0);
                     });
                 }])
                 ->orderBy("ID_Tipo")
@@ -344,14 +365,14 @@ class RecursosRepository
                 ->where("ID_Tipo", $id_tipo)
                 ->where(function($q) use ($id_nivel) {
                     $q->where("ID_Nivel", $id_nivel)
-                    ->orWhere("ID_Nivel" , 4);
+                    ->orWhere("ID_Nivel" , 0);
                 })
                 ->with(["bloqueos" => function($q) use ($id_nivel) {
                     $q->select("ID", "ID_Recurso", "Dia_Semana", "HI", "HF", "ID_Nivel", "Causa")
                     ->where("B", 0)
                     ->where(function($q2) use ($id_nivel) {
                         $q2->where("ID_Nivel", $id_nivel)
-                        ->orWhere("ID_Nivel" , 4);
+                        ->orWhere("ID_Nivel" , 0);
                     });
                 }])
                 ->orderBy("Recurso")
@@ -432,13 +453,13 @@ class RecursosRepository
         DB::connection($conn_name)->beginTransaction();
 
         try {
-            // Verifico que exista el usuario
-            Usuario::on($conn_name)->findOrFail($id_usuario);
+            // Verifico que exista ese Personal
+            Personal::on($conn_name)->findOrFail($id_usuario);
 
             // Verifico que el recurso sea o de el nivel de el usuario o de la institucion
             Recurso::on($conn_name)
                 ->where('ID', $id_recurso)
-                ->whereIn('ID_Nivel', [$id_nivel, 4]) // 4 = nivel general
+                ->whereIn('ID_Nivel', [$id_nivel, 0]) // 0 = nivel general
                 ->firstOrFail();
 
             $reserva = RecursoReserva::on($conn_name)
@@ -747,8 +768,8 @@ class RecursosRepository
 
             // Contar reservas por franja horaria en los slots
             foreach ($reservas_dia as $reserva) {
-                $hi = $reserva->Hora_Inicio->hour;
-                $hf = $reserva->Hora_Fin->hour;
+                $hi = Carbon::parse($reserva->Hora_Inicio)->hour;
+                $hf = Carbon::parse($reserva->Hora_Fin)->hour;
                 for ($h = $hi; $h < $hf; $h++) {
                     $key = "$h:00-".($h+1).":00";
                     if (isset($slots[$key])) {
@@ -783,6 +804,13 @@ class RecursosRepository
                         'exceso' => $count - $nuevaCantidad,
                         'ids' => array_column($respuesta, 'reservas_id')
                     ];
+
+                    // Filtramos las ID de las reservas UNIQUE
+                    $candidatos = [];
+                    foreach($resultado as $r) {
+                        $candidatos = array_merge($candidatos, $r['ids']);
+                    }
+                    $lista_candidatos = array_values(array_unique($candidatos));
                 }
             }
         }
@@ -794,7 +822,8 @@ class RecursosRepository
 
         return [
             'conflicto' => !empty($resultado),
-            'detalles' => $resultado
+            'detalles' => $resultado,
+            'lista_a_eliminar' => $lista_candidatos,
         ];
     }
 
