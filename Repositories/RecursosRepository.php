@@ -9,6 +9,7 @@ use App\Services\DataBaseService;
 use App\Services\FuncionesService;
 use Carbon\Carbon;
 use App\Models\Institucional\RecursoBloqueo;
+use App\Models\Institucional\RecursoLectura;
 use App\Models\Institucional\RecursoReserva;
 use App\Models\Institucional\Usuario;
 use Illuminate\Support\Facades\DB;
@@ -287,39 +288,67 @@ class RecursosRepository
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario) {
+    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo)
+    {
         $id_institucion = $id;
+        $now = Carbon::now('America/Argentina/Buenos_Aires');
+        $Fecha_Actual = $now->format('Y-m-d');
+        $Hora_Actual = $now->format('H:i:s');
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la accion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
 
         DB::connection($conn_name)->beginTransaction();
 
         try {
-            $userIds = RecursoBloqueo::on($conn_name)
-                ->where('ID_Recurso', $id_recurso)
-                ->where('B', 0)
-                ->distinct()
-                ->pluck('ID_Usuario_B');
-
             $recursoActualizado = Recurso::on($conn_name)
                 ->where('ID', $id_recurso)
                 ->update(['B' => 1]);
 
             if ($recursoActualizado === 0) {
-                throw new Exception("No se encontró el recurso con ID {$id_recurso} para dar de baja.");
+                throw new Exception("No se encontro el recurso a dar de baja.");
             }
 
             RecursoBloqueo::on($conn_name)
                 ->where('ID_Recurso', $id_recurso)
                 ->update([
                     'B' => 1,
-                    'Fecha_B' => now()->toDateString(),
-                    'Hora_B' => now()->toTimeString(),
+                    'Fecha_B' => $Fecha_Actual,
+                    'Hora_B' => $Hora_Actual,
                     'ID_Usuario_B' => $id_usuario
                 ]);
 
+            $reservasActivas = RecursoReserva::on($conn_name)
+                ->where('ID_Recurso', $id_recurso)
+                ->where('B', 0)
+                ->get();
+
+            foreach ($reservasActivas as $reserva) {
+                $reserva->update([
+                    'B' => 1,
+                    'Fecha_B' => $Fecha_Actual,
+                    'Hora_B' => $Hora_Actual,
+                    'ID_Usuario_B' => $id_usuario,
+                    'B_Motivo' => $motivo
+                ]);
+
+                RecursoLectura::on($conn_name)
+                    ->create([
+                        'ID_Recurso' => $reserva->ID_Recurso,
+                        'ID_Usuario' => $reserva->ID_Usuario,
+                        'Fecha' => $Fecha_Actual,
+                        'Hora' => $Hora_Actual
+                    ]);
+            }
             DB::connection($conn_name)->commit();
-            return $userIds;
 
         } catch (Exception $e) {
             DB::connection($conn_name)->rollback();
@@ -448,7 +477,6 @@ class RecursosRepository
         if ($fecha_reserva->lt(Carbon::createFromFormat('Y-m-d', $Fecha_Actual))) {
             throw new InvalidArgumentException("La fecha de reserva no puede ser anterior a hoy.");
         }
-
 
         DB::connection($conn_name)->beginTransaction();
 
@@ -594,7 +622,7 @@ class RecursosRepository
         }
     }
 
-     public function ver_listado_reservas_antiguas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
+    public function ver_listado_reservas_antiguas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
 
         //verificar la cantidad de consultas a la base de datos
         $this->actualizar_reservas_activas($id,$id_usuario, $id_nivel);
@@ -727,104 +755,268 @@ class RecursosRepository
         }
     }
 
-    public function verificarReservas($id, $id_recurso, $nuevaCantidad)
+    // Verifica si al reducir la cantidad de un recurso, existen reservas futuras que quedarían en conflicto.
+    // Si no hay conflictos, actualiza la cantidad del recurso. Si hay conflictos, retorna las reservas afectadas y la cantidad solicitada.
+    public function verificar_reservas($id_institucion, $id_recurso, $nuevaCantidad)
     {
-        $id_institucion = $id;
-        $Fecha_Actual = Carbon::now('America/Argentina/Buenos_Aires')->format("Y-m-d");
-        $resultado = [];
+        $connName = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
-        $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
-
-        if($nuevaCantidad < 0) {
-            throw new InvalidArgumentException("La cantidad ingresada es menor a 0");
-        }
-
-        // Traer todas las reservas de hoy a futuro
-        $reservas = RecursoReserva::on($conn_name)
-            ->select('ID', "Fecha", "Hora", 'Fecha_R', 'Hora_Inicio', 'Hora_Fin')
-            ->where('ID_Recurso', $id_recurso)
-            ->where('B', 0)
-            ->where('Fecha_R', '>=', $Fecha_Actual)
-            ->orderBy('Fecha_R')
-            ->orderBy('Hora_Inicio')
-            ->get();
-
-        // Si no hay reservas simplemente actualizamos la cantidad
-        if($reservas->isEmpty()) {
-            $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad);
-
-            return [
-                'conflicto' => false,
-                'detalles' => $resultado
-            ];
-        }
-
-        foreach ($reservas->groupBy('Fecha_R') as $fecha => $reservas_dia) {
-            // Inicializar slots para esa fecha
-            $slots = [];
-            for ($h = 7; $h < 17; $h++) {
-                $slots["$h:00-".($h+1).":00"] = [];
+        try {
+            if ($nuevaCantidad === null || $nuevaCantidad < 0) {
+                throw new InvalidArgumentException('Cantidad ingresada invalida.');
             }
+            // Buscar el recurso y obtener reservas futuras activas
+            $recurso = Recurso::on($connName)->findOrFail($id_recurso);
+            $cantidadDisponible = $nuevaCantidad;
+            $hoy = Carbon::now("America/Argentina/Buenos_Aires")->format('Y-m-d');
+            $reservas = RecursoReserva::on($connName)
+                ->where('ID_Recurso', $id_recurso)
+                ->where('B', 0)
+                ->where('Fecha_R', '>=', $hoy)
+                ->orderBy('Fecha_R', 'asc')
+                ->orderBy('Hora_Inicio', 'asc')
+                ->get();
 
-            // Contar reservas por franja horaria en los slots
-            foreach ($reservas_dia as $reserva) {
-                $hi = Carbon::parse($reserva->Hora_Inicio)->hour;
-                $hf = Carbon::parse($reserva->Hora_Fin)->hour;
-                for ($h = $hi; $h < $hf; $h++) {
-                    $key = "$h:00-".($h+1).":00";
-                    if (isset($slots[$key])) {
-                        $slots[$key][] = [
-                            'reservas_id' => $reserva->ID,
-                            'fecha' => $reserva->Fecha,
-                            'hora' => $reserva->Hora,
-                        ];
-                    }
-                }
+            // Si no hay reservas entonces
+            if($reservas->isEmpty()) {
+                $recurso->Cantidad = $nuevaCantidad;
+                $recurso->save();
+                return [
+                    'message' => "Cantidad actualizada sin conflictos.",
+                    'conflicto' => false
+                ];
             }
-
-            // Guardar los slots que superen la nueva cantidad
-            foreach ($slots as $slot => $reservas_slot) {
-                $count = count($reservas_slot);
-                if($count > $nuevaCantidad) {
-                    // Ordenamos el array para que nos queden los candidatos a eliminar
-                    usort($reservas_slot, function($a, $b) {
-                        // Se podrian agregar mas condiciones como que la Fecha_R y Hora_Inicio mas futura
-                        if ($a['fecha']->eq($b['fecha'])) {
-                            return $a['hora']->eq($b['hora']) ? 0 : ($a['hora']->lt($b['hora']) ? -1 : 1);
+            // Evitamos recorrer toda las validaciones
+            if($nuevaCantidad == 0) {
+                return [
+                    'reservas_en_conflicto' => $reservas->map(function($r){
+                        try {
+                            $fecha = Carbon::parse($r->Fecha_R)->format('Y-m-d');
+                            $hi = Carbon::parse($r->Hora_Inicio)->format('H:i:s');
+                            $hf = Carbon::parse($r->Hora_Fin)->format('H:i:s');
+                        } catch (Exception $e) {
+                            return [];
                         }
-                        return $a['fecha']->lt($b['fecha']) ? -1 : 1;
-                    });
 
-                    $respuesta = array_slice($reservas_slot, 0, $count - $nuevaCantidad);
-
-                    $resultado[] = [
-                        'fecha' => $fecha,
-                        'slot' => $slot,
-                        'reservas' => $count,
-                        'exceso' => $count - $nuevaCantidad,
-                        'ids' => array_column($respuesta, 'reservas_id')
-                    ];
-
-                    // Filtramos las ID de las reservas UNIQUE
-                    $candidatos = [];
-                    foreach($resultado as $r) {
-                        $candidatos = array_merge($candidatos, $r['ids']);
-                    }
-                    $lista_candidatos = array_values(array_unique($candidatos));
-                }
+                        return [
+                            'id' => $r->ID,
+                            'fecha' => $fecha,
+                            'hora_inicio' => $hi,
+                            'hora_fin' => $hf,
+                        ];
+                    })->values()->all(),
+                    'nueva_cantidad' => $nuevaCantidad,
+                    'conflicto' => true
+                ];
             }
-        }
 
-        // Si no hay resultados, actualizamos la cantidad
-        if (empty($resultado)) {
-            $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad);
-        }
+            $reservasEnConflicto = collect();
 
-        return [
-            'conflicto' => !empty($resultado),
-            'detalles' => $resultado,
-            'lista_a_eliminar' => $lista_candidatos,
-        ];
+            // Generar eventos de inicio y fin para cada reserva para simular la ocupación de recursos en el tiempo
+            $eventos = $reservas->flatMap(function($reserva) {
+                try {
+                    $hi = Carbon::parse($reserva->Hora_Inicio);
+                    $hf = Carbon::parse($reserva->Hora_Fin);
+                } catch (Exception $e) {
+                    return [];
+                }
+                return [
+                    ['hora' => $hi, 'tipo' => 'inicio', 'reserva' => $reserva],
+                    ['hora' => $hf, 'tipo' => 'fin', 'reserva' => $reserva],
+                ];
+            });
+
+            // Ordenar los eventos cronológicamente para simular la ocupación de recursos
+            $eventos = $eventos->sort(function($a, $b) {
+                if ($a['hora']->eq($b['hora'])) {
+                    return $a['tipo'] === 'inicio' ? -1 : 1;
+                }
+                return $a['hora']->lt($b['hora']) ? -1 : 1;
+            })->values();
+
+            $recursosOcupados = 0;
+            $reservasActivas = collect();
+
+            // Recorrer los eventos y detectar si en algún momento se supera la cantidad disponible
+            $eventos->each(function($evento) use (&$recursosOcupados, &$reservasActivas, $cantidadDisponible, &$reservasEnConflicto) {
+                if ($evento['tipo'] === 'inicio') {
+                    $recursosOcupados++;
+                    $reservasActivas->push($evento['reserva']);
+                    if ($recursosOcupados > $cantidadDisponible) {
+                        $reservaConflicto = $reservasActivas->sortByDesc(fn($r) => ($r->Fecha . ' ' . ($r->Hora ?? '00:00:00')))->first(); // Filtro LIFO
+
+                        $reservasActivas = $reservasActivas->filter(function($r) use ($reservaConflicto) {
+                            return $r->ID !== $reservaConflicto->ID;
+                        })->values();
+
+                        $reservasEnConflicto->push($reservaConflicto);
+                        $recursosOcupados--;
+                    }
+                } else {
+                    $recursosOcupados--;
+                    $reservasActivas = $reservasActivas->filter(function($reserva) use ($evento) {
+                        return $reserva->ID !== $evento['reserva']->ID;
+                    })->values();
+                }
+            });
+
+            // Si hay conflictos, retornar las reservas afectadas y la cantidad solicitada
+            if (!$reservasEnConflicto->isEmpty()) {
+                return [
+                    'reservas_en_conflicto' => $reservasEnConflicto->all(),
+                    'nueva_cantidad' => $nuevaCantidad,
+                    'conflicto' => true
+                ];
+            }
+
+            // Si no hay conflictos, actualizar la cantidad del recurso
+            $recurso->Cantidad = $nuevaCantidad;
+            $recurso->save();
+            return [
+                'message' => "Cantidad actualizada sin conflictos.",
+                'conflicto' => false
+            ];
+        } catch (Exception $e) {
+            throw $e;
+        }
     }
 
+    // Cancela reservas en conflicto y envia notificaciones (debe llamarse solo si el usuario confirma).
+    // Cancela las reservas en conflicto y notifica a los usuarios afectados.
+    // Luego, vuelve a intentar actualizar la cantidad del recurso.
+    public function cancelar_reservas_en_conflicto($id_institucion, $reservasEnConflicto, $id_recurso, $nuevaCantidad, $id_usuario, $motivo)
+    {
+        $connName = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la accion sea de un tipo adecuado
+        $personal = Personal::on($connName)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
+
+        DB::connection($connName)->beginTransaction();
+
+        try {
+            // Cancelar cada reserva en conflicto y registrar la notificación de la cancelación
+            collect($reservasEnConflicto)->each(function($reserva) use ($connName, $motivo, $id_usuario) {
+                // Damos de baja la reserva
+                $r = RecursoReserva::on($connName)->findOrFail($reserva->ID);
+                $r->B = 1;
+                $r->B_Motivo = $motivo;
+                $r->Fecha_B = Carbon::now("America/Argentina/Buenos_Aires")->format('Y-m-d');
+                $r->Hora_B = Carbon::now("America/Argentina/Buenos_Aires")->format('H:i:s');
+                $r->ID_Usuario_B = $id_usuario;
+                $reserva->save();
+
+                // Creamos la notificacion
+                $lectura = new RecursoLectura();
+                $lectura->setConnection($connName);
+                $lectura->ID_Reserva = $reserva->ID;
+                $lectura->ID_Usuario = $reserva->ID_Usuario;
+                $lectura->Fecha = Carbon::now("America/Argentina/Buenos_Aires")->format('Y-m-d');
+                $lectura->Hora = Carbon::now("America/Argentina/Buenos_Aires")->format('H:i:s');
+                $lectura->save();
+            });
+
+            DB::connection($connName)->commit();
+
+            // Intentar nuevamente actualizar la cantidad del recurso después de cancelar los conflictos
+            return $this->verificar_reservas($id_institucion, $id_recurso, $nuevaCantidad);
+        }
+        catch (Exception $e) {
+            DB::connection($connName)->rollback();
+            throw $e;
+        }
+    }
+
+    public function buscar_reservas($id_institucion, $id_recurso, $fecha)
+    {
+        $connName = $this->dataBaseService->selectConexion($id_institucion)->getName();
+        $diaSemana = Carbon::parse($fecha)->dayOfWeekIso; // 1=lunes ... 7=domingo
+
+        if($diaSemana < 1 || $diaSemana > 5) {
+            throw new DomainException("La fecha ingresada debe ser un día entre lunes y viernes.");
+        }
+
+        // Buscar bloqueos fijos para ese recurso y día
+        $bloqueos = RecursoBloqueo::on($connName)
+            ->where('ID_Recurso', $id_recurso)
+            ->where('Dia_Semana', $diaSemana)
+            ->where('B', 0)
+            ->get(['HI', 'HF', 'Causa']);
+
+        // Buscar reservas activas para ese recurso y fecha
+        $recurso = Recurso::on($connName)->findOrFail($id_recurso);
+        $cantidadMaxima = $recurso->Cantidad;
+        $reservas = RecursoReserva::on($connName)
+            ->where('ID_Recurso', $id_recurso)
+            ->where('B', 0)
+            ->where('Fecha_R', $fecha)
+            ->orderBy('Hora_Inicio', 'asc')
+            ->get(['Hora_Inicio', 'Hora_Fin']);
+
+        // Calcular franjas horarias donde la cantidad de reservas alcanza el máximo
+        $eventos = collect();
+        $reservas->each(function($reserva) use (&$eventos) {
+            $eventos->push(['hora' => $reserva->Hora_Inicio, 'tipo' => 'inicio']);
+            $eventos->push(['hora' => $reserva->Hora_Fin, 'tipo' => 'fin']);
+        });
+        $eventos = $eventos->sortBy('hora')->values();
+
+        // Usar reduce para calcular las franjas horarias donde la cantidad de reservas alcanza el máximo.
+        // Recorre los eventos de inicio/fin y va sumando/restando la cantidad de recursos ocupados.
+        // Cuando la cantidad de ocupados llega al máximo, marca el inicio de una franja ocupada.
+        // Cuando baja del máximo, cierra la franja y la agrega al resultado.
+        $result = $eventos->reduce(function($acumulador, $evento) use ($cantidadMaxima) {
+            // Si es un evento de inicio de reserva, incrementa la cantidad de ocupados
+            if ($evento['tipo'] === 'inicio') {
+                $acumulador['ocupados']++;
+                // Si justo al incrementar se alcanza el máximo, guardamos el inicio de la franja ocupada
+                if ($acumulador['ocupados'] == $cantidadMaxima) {
+                    // Aquí comienza una franja donde no hay más disponibilidad
+                    $acumulador['inicioOcupado'] = $evento['hora'];
+                }
+            } else {
+                // Si es un evento de fin de reserva
+                // Antes de decrementar, si estábamos en ocupación máxima, cerramos la franja
+                if ($acumulador['ocupados'] == $cantidadMaxima && $acumulador['inicioOcupado'] !== null) {
+                    // Aquí termina la franja de ocupación máxima
+                    $acumulador['franjasOcupadas'][] = [
+                        'HI' => $acumulador['inicioOcupado'],
+                        'HF' => $evento['hora'],
+                        'Causa' => 'Ocupación máxima'
+                    ];
+                    $acumulador['inicioOcupado'] = null;
+                }
+                // Decrementa la cantidad de ocupados
+                $acumulador['ocupados']--;
+            }
+            return $acumulador;
+        }, [
+            'ocupados' => 0,           // Cantidad de reservas activas en el momento
+            'inicioOcupado' => null,   // Marca el inicio de una franja ocupada
+            'franjasOcupadas' => []    // Acumula las franjas de ocupación máxima
+        ]);
+        $franjasOcupadas = $result['franjasOcupadas'];
+
+        // Unir bloqueos fijos y franjas ocupadas
+        $bloqueosTotales = $bloqueos->map(function($b) {
+            return [
+                'HI' => $b->HI,
+                'HF' => $b->HF,
+                'Causa' => $b->Causa
+            ];
+        })->toArray();
+        $bloqueosTotales = array_merge($bloqueosTotales, $franjasOcupadas);
+
+        // Devolver json/array con los horarios bloqueados
+        return [
+            'fecha' => $fecha,
+            'id_recurso' => $id_recurso,
+            'bloqueos' => $bloqueosTotales
+        ];
+    }
 }

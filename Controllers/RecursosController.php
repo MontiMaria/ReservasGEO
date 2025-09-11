@@ -148,31 +148,26 @@ class RecursosController extends Controller
         }
     }
 
-    public function eliminar_recurso(Request $request, $id)
-    {
+    public function eliminar_recurso(Request $request, $id) {
+
+        $data = $request->all();
+
         try {
-            $id_institucion = $id;
-            $id_recurso = $request->input('id_recurso');
-            $id_usuario = $request->input('id_usuario');
 
-            if (!$id_recurso || !$id_usuario) {
-                throw new Exception("Los parámetros id_recurso y id_usuario son requeridos.");
-            }
-
-            $resultado = $this->RecursosService->eliminar_recurso($id_institucion, $id_recurso, $id_usuario);
+            $informe = $this->RecursosService->eliminar_recurso($id, $data['id_recurso'], $data['id_usuario'], $data['motivo']);
 
             return response()->json([
-                'success' => true,
-                'data' => $resultado,
-                'messages' => 'El recurso y sus reservas asociadas fueron eliminados correctamente.',
-            ], 200);
+                'success'  => true,
+                'data'     => $informe,
+                'messages' => '',
+            ]);
 
         } catch (Exception $e) {
-            Log::error("CONTROLLER ERROR al eliminar recurso: ".$e->getMessage(), ['exception' => $e]);
+            Log::error("CONTROLLER ERROR al eliminar recurso: " . $e->getMessage(), ['exception' => $e]);
 
             return response()->json([
-                'success' => false,
-                'data' => null,
+                'success'  => false,
+                'data'     => null,
                 'messages' => 'Error en la eliminación del recurso: ' . $e->getMessage(),
             ], 500);
         }
@@ -349,11 +344,11 @@ class RecursosController extends Controller
         }
     }
 
-    public function verificarReservas($id, Request $request)
+    public function verificar_reservas($id, Request $request)
     {
         $data = $request->all();
         try {
-            $informe = $this->RecursosService->verificarReservas($id, $data['id_recurso'], $data['nuevaCantidad']);
+            $informe = $this->RecursosService->verificar_reservas($id, $data['id_recurso'], $data['nuevaCantidad']);
 
             return response()->json([
                 'success' => true,
@@ -366,9 +361,56 @@ class RecursosController extends Controller
             return response()->json([
                 'success' => false,
                 'data' => null,
-                'messages' => 'Error en la verificacion de materias' . $e->getMessage(),
+                'messages' => 'Error en la verificacion de reservas' . $e->getMessage(),
             ], 500);
         }
     }
 
+    public function cancelar_reservas_en_conflicto($id, Request $request) {
+
+        $data = $request->all();
+
+        try {
+            $informe = $this->RecursosService->cancelar_reservas_en_conflicto($id, $data['reservasEnConflicto'], $data['id_recurso'], $data['nuevaCantidad'], $data['id_usuario'], $data['motivo']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }
+        catch(Exception $e) {
+            Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la eliminacion de las reservas'.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function buscar_reservas($id, Request $request) {
+
+        $data = $request->all();
+
+        try {
+            $informe = $this->RecursosService->buscar_reservas($id, $data['id_recurso'], $data['fecha']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $informe,
+                'messages' => '',
+            ]);
+        }
+        catch(Exception $e) {
+            Log::error("CONTROLLER ERROR: ".$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'messages' => 'Error en la busqueda de horarios disponibles de reserva'.$e->getMessage(),
+            ], 500);
+        }
+    }
 }

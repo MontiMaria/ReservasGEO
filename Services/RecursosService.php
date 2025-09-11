@@ -4,10 +4,7 @@ namespace App\Services;
 
 use App\Repositories\RecursosRepository;
 use Illuminate\Support\Facades\Log;
-use App\Models\User;
-use App\Notifications\RecursoCanceladoNotification;
 use Exception;
-use Illuminate\Support\Facades\Notification;
 use InvalidArgumentException;
 
 class RecursosService
@@ -82,23 +79,14 @@ class RecursosService
         }
     }
 
-    public function eliminar_recurso($id, $id_recurso, $id_usuario)
+    public function eliminar_recurso($id, $id_recurso, $id_usuario, $motivo)
     {
-        $id_institucion = $id;
         try {
-            //$conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
-            $userIds = $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario);
-
-            if ($userIds->isNotEmpty()) {
-                $usuarios_a_notificar = User::find($userIds);
-                Notification::send($usuarios_a_notificar, new RecursoCanceladoNotification());
-            }
-
-            return "El recurso y todas sus reservas han sido eliminados correctamente.";
+            return $this->RecursosRep->eliminar_recurso($id, $id_recurso, $id_usuario, $motivo);
 
         } catch (Exception $e) {
-            Log::error("ERROR al eliminar el recurso {$id_recurso}: " . $e->getMessage(), ['exception' => $e]);
+            Log::error("ERROR: " . $e->getMessage(), ['exception' => $e]);
             throw $e;
         }
     }
@@ -184,11 +172,11 @@ class RecursosService
         }
     }
 
-    public function verificarReservas($id, $id_recurso, $nuevaCantidad)
+    public function verificar_reservas($id, $id_recurso, $nuevaCantidad)
     {
         try {
 
-            return $this->RecursosRep->verificarReservas($id, $id_recurso, $nuevaCantidad);
+            return $this->RecursosRep->verificar_reservas($id, $id_recurso, $nuevaCantidad);
 
         }
         catch(Exception $e) {
@@ -196,5 +184,26 @@ class RecursosService
             throw $e;
         }
     }
-}
 
+    public function cancelar_reservas_en_conflicto($id_institucion, $reservasEnConflicto, $id_recurso, $nuevaCantidad, $id_usuario, $motivo) {
+        try {
+
+            return $this->RecursosRep->cancelar_reservas_en_conflicto($id_institucion, $reservasEnConflicto, $id_recurso, $nuevaCantidad, $id_usuario, $motivo);
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+
+    public function buscar_reservas($id_institucion, $id_recurso, $fecha) {
+        try {
+
+            return $this->RecursosRep->buscar_reservas($id_institucion, $id_recurso, $fecha);
+        }
+        catch(Exception $e) {
+            Log::error("ERROR: ".$e->getMessage(), ['exception' => $e]);
+            throw $e;
+        }
+    }
+}
