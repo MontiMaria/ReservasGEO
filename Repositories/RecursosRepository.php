@@ -11,7 +11,6 @@ use Carbon\Carbon;
 use App\Models\Institucional\RecursoBloqueo;
 use App\Models\Institucional\RecursoLectura;
 use App\Models\Institucional\RecursoReserva;
-use App\Models\Institucional\Usuario;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Exception;
@@ -70,7 +69,7 @@ class RecursosRepository
 
                     // Validaciones
                     if($dia < 1 || $dia > 5) {
-                        throw new InvalidArgumentException("El valor ingresado se encuentra fuera del rango");
+                        throw new DomainException("El valor ingresado se encuentra fuera del rango");
                     }
                     try {
                         $hi_p = Carbon::parse($hi);
@@ -88,7 +87,7 @@ class RecursosRepository
                         throw new DomainException("La hora de incio es mayor o igual a la hora de finalizacion");
                     }
                     if((!$hi_p->between($hi_min, $hi_max)) || (!$hf_p->between($hf_min, $hf_max))) {
-                        throw new InvalidArgumentException("El valor ingresado se encuentra fuera del rango horario de las reservas");
+                        throw new DomainException("El valor ingresado se encuentra fuera del rango horario de las reservas");
                     }
 
                     $bloqueo = $nuevo_recurso->bloqueos()->create([
@@ -462,20 +461,25 @@ class RecursosRepository
             throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
         }
         try {
-            // Parseo y valido la fecha y hora
-            $fecha_reserva = Carbon::createFromFormat('Y-m-d', $fecha_r);
+            // Parseo y valido las horas
             $hi = Carbon::createFromFormat('H:i:s', $hora_inicio);
             $hf = Carbon::createFromFormat('H:i:s', $hora_fin);
+            $hi_min = Carbon::createFromTime(7, 0, 0);
+            $hf_max = Carbon::createFromTime(17, 0, 0);
+
+            $minutes = $hi->diffInMinutes($hf);
         }
-        catch (Exception $e) {
+        catch(Exception $e) {
             throw new InvalidArgumentException("Formato de fecha/hora inválido: " . $e->getMessage());
         }
-        if ($hi->gte($hf)) {
-            throw new InvalidArgumentException("La hora de inicio debe ser anterior a la hora de fin de la reserva.");
+        if($hi->gte($hf)) {
+            throw new DomainException("La hora de inicio debe ser anterior a la hora de fin de la reserva.");
         }
-
-        if ($fecha_reserva->lt(Carbon::createFromFormat('Y-m-d', $Fecha_Actual))) {
-            throw new InvalidArgumentException("La fecha de reserva no puede ser anterior a hoy.");
+        if($minutes < 40 || $minutes > 240) {
+            throw new DomainException("Tiempo de duracion de la reserva invalido.");
+        }
+        if($hi->lt($hi_min) || $hf->gt($hf_max)) {
+            throw new DomainException("Reserva fuera del rango disponible.");
         }
 
         DB::connection($conn_name)->beginTransaction();
@@ -529,18 +533,18 @@ class RecursosRepository
         }
     }
 
-    public function actualizar_reservas_activas($id,$id_usuario, $id_nivel){
+    public function actualizar_reservas_activas($id, $id_usuario, $id_nivel){
         $id_institucion = $id;
         try{
             $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
-            $fechaActual = Carbon::now()->format('Y-m-d');
-            $horaActual = Carbon::now()->format('H:i:s');
+            $fechaActual = Carbon::now('America/Argentina/Buenos_Aires')->format('Y-m-d');
+            $horaActual = Carbon::now('America/Argentina/Buenos_Aires')->format('H:i:s');
 
             $reservas = RecursoReserva::on($connection)
                 ->where('B','=',0)
                 ->where(function($query) use ($fechaActual, $horaActual, $id_nivel){
                     $query->where('Fecha_R', '<', $fechaActual)
-                        ->where('ID_Nivel',$id_nivel)
+                        ->where('ID_Nivel', $id_nivel) // Por que?
                         ->orWhere(function($q) use ($fechaActual, $horaActual){
                             $q->where('Fecha_R',$fechaActual)
                                 ->where('Hora_Fin','<=', $horaActual);
@@ -563,11 +567,11 @@ class RecursosRepository
             $rol = Personal::on($connection)
                 ->select('Tipo')
                 ->where('ID',$id_usuario)
-                ->first();
+                ->firstOrFail();
             $cant_por_pagina = $cant_por_pagina ?? 15;
             $pagina = $pagina ?? 1;
 
-            if($rol->Tipo == 'DI'){
+            if(in_array($rol->Tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)){
                 $reservas = RecursoReserva::on($connection)
                     ->from('recursos_reservas as rr')
                     ->select('recursos.Recurso','rr.*','personal.Nombre','personal.Apellido')
@@ -576,7 +580,10 @@ class RecursosRepository
                     //se le podría agregar un join con materias para que traiga el nombre de la materia también
                     //->join('materias','materias.ID','=','rr.ID_Materia')
                     ->where('rr.B','=',0)
-                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->where(function($q) use ($id_nivel) {
+                        $q->where("rr.ID_Nivel", $id_nivel)
+                        ->orWhere("rr.ID_Nivel" , 0);
+                    })
                     ->orderBy('rr.Fecha_R','asc')
                     ->orderBy('rr.Hora_Inicio','asc');
             } elseif (in_array($rol->Tipo, ['PF', 'MI', 'MG'])) {
@@ -587,7 +594,10 @@ class RecursosRepository
                     //se le podría agregar un join con materias para que traiga el nombre de la materia también
                     //->join('materias','materias.ID','=','rr.ID_Materia')
                     ->where('rr.B','=',0)
-                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->where(function($q) use ($id_nivel) {
+                        $q->where("rr.ID_Nivel", $id_nivel)
+                        ->orWhere("rr.ID_Nivel" , 0);
+                    })
                     ->where('rr.ID_Docente',$id_usuario)
                     ->orderBy('rr.Fecha_R','asc')
                     ->orderBy('rr.Hora_Inicio','asc');
@@ -632,11 +642,11 @@ class RecursosRepository
             $rol = Personal::on($connection)
                 ->select('Tipo')
                 ->where('ID',$id_usuario)
-                ->first();
+                ->firstOrFail();
             $cant_por_pagina = $cant_por_pagina ?? 15;
             $pagina = $pagina ?? 1;
 
-            if($rol->Tipo == 'DI'){
+            if(in_array($rol->Tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)){
                 $reservas = RecursoReserva::on($connection)
                     ->from('recursos_reservas as rr')
                     ->select('recursos.Recurso','rr.*','personal.Nombre','personal.Apellido')
@@ -645,7 +655,10 @@ class RecursosRepository
                     //se le podría agregar un join con materias para que traiga el nombre de la materia también
                     //->join('materias','materias.ID','=','rr.ID_Materia')
                     ->where('rr.B','=',1)
-                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->where(function($q) use ($id_nivel) {
+                        $q->where("rr.ID_Nivel", $id_nivel)
+                        ->orWhere("rr.ID_Nivel" , 0);
+                    })
                     ->orderBy('rr.Fecha_R','desc')
                     ->orderBy('rr.Hora_Inicio','desc');
             } elseif (in_array($rol->Tipo, ['PF', 'MI', 'MG'])) {
@@ -656,7 +669,10 @@ class RecursosRepository
                     //se le podría agregar un join con materias para que traiga el nombre de la materia también
                     //->join('materias','materias.ID','=','rr.ID_Materia')
                     ->where('rr.B','=',1)
-                    ->where('rr.ID_Nivel',$id_nivel)
+                    ->where(function($q) use ($id_nivel) {
+                        $q->where("rr.ID_Nivel", $id_nivel)
+                        ->orWhere("rr.ID_Nivel" , 0);
+                    })
                     ->where('rr.ID_Docente',$id_usuario)
                     ->orderBy('rr.Fecha_R','desc')
                     ->orderBy('rr.Hora_Inicio','desc');
@@ -698,14 +714,16 @@ class RecursosRepository
             $connection = $this->dataBaseService->selectConexion($id_institucion)->getName();
             $recursos = Recurso::on($connection)
                 ->select('ID','Recurso','Descripcion','ID_Tipo','ID_Nivel')
-                ->where('ID_Nivel',$id_nivel)
+                ->where(function($q) use ($id_nivel) {
+                    $q->where("ID_Nivel", $id_nivel)
+                    ->orWhere("ID_Nivel" , 0);
+                })
                 ->where('Estado','=','H')
                 ->where('B','=',0)
                 ->get();
 
             $recursos = $recursos->toArray();
             return $recursos;
-
 
         } catch(Exception $e) {
             Log::error("ERROR: " . $e->getMessage() . " - linea " . $e->getLine());
@@ -939,6 +957,9 @@ class RecursosRepository
 
         if($diaSemana < 1 || $diaSemana > 5) {
             throw new DomainException("La fecha ingresada debe ser un día entre lunes y viernes.");
+        }
+        if($fecha->lt(Carbon::today('America/Argentina/Buenos_Aires'))) {
+            throw new DomainException("La fecha de reserva no puede ser anterior a hoy.");
         }
 
         // Buscar bloqueos fijos para ese recurso y día
