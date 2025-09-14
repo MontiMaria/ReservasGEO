@@ -31,10 +31,10 @@ class RecursosService
         }
     }
 
-    public function modificar_cantidad($id, $id_recurso, $cantidad) {
+    public function modificar_cantidad($id, $id_recurso, $cantidad, $id_usuario) {
         try {
 
-            return $this->RecursosRep->modificar_cantidad($id, $id_recurso, $cantidad);
+            return $this->RecursosRep->modificar_cantidad($id, $id_recurso, $cantidad, $id_usuario);
 
         }
         catch(Exception $e) {
@@ -172,11 +172,11 @@ class RecursosService
         }
     }
 
-    public function verificar_reservas($id, $id_recurso, $nuevaCantidad)
+    public function verificar_reservas($id, $id_recurso, $nuevaCantidad, $id_usuario)
     {
         try {
 
-            return $this->RecursosRep->verificar_reservas($id, $id_recurso, $nuevaCantidad);
+            return $this->RecursosRep->verificar_reservas($id, $id_recurso, $nuevaCantidad, $id_usuario);
 
         }
         catch(Exception $e) {

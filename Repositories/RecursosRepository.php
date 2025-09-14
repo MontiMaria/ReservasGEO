@@ -115,10 +115,19 @@ class RecursosRepository
         }
     }
 
-    public function modificar_cantidad($id, $id_recurso, $cantidad) {
+    public function modificar_cantidad($id, $id_recurso, $cantidad, $id_usuario) {
         $id_institucion = $id;
 
         $conn_name = $this->dataBaseService->selectConexion($id_institucion)->getName();
+
+        // Verifico que el usuario que realiza la creacion sea de un tipo adecuado
+        $personal = Personal::on($conn_name)->with('cargo')->findOrFail($id_usuario);
+        $tipo = $personal->cargo->Tipo ?? null;
+
+        // Agregar los cargos que sean necesarios
+        if(!in_array($tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)) {
+            throw new AuthorizationException('El cargo del usuario no esta autorizado para realizar esta accion');
+        }
 
         DB::connection($conn_name)->beginTransaction();
 
@@ -139,10 +148,10 @@ class RecursosRepository
             $recurso->save();
 
             DB::connection($conn_name)->commit();
-            return $recurso;
+
+            return "Cantidad actualizada sin conflictos.";
 
         } catch (Exception $e) {
-
             DB::connection($conn_name)->rollback();
             throw $e;
         }
@@ -544,10 +553,14 @@ class RecursosRepository
                 ->where('B','=',0)
                 ->where(function($query) use ($fechaActual, $horaActual, $id_nivel){
                     $query->where('Fecha_R', '<', $fechaActual)
-                        ->where('ID_Nivel', $id_nivel) // Por que?
-                        ->orWhere(function($q) use ($fechaActual, $horaActual){
-                            $q->where('Fecha_R',$fechaActual)
-                                ->where('Hora_Fin','<=', $horaActual);
+                        // Esto se podria sacar para que actualize todas
+                        ->where(function($q) use ($id_nivel) {
+                            $q->where("rr.ID_Nivel", $id_nivel)
+                            ->orWhere("rr.ID_Nivel" , 0);
+                        })
+                        ->orWhere(function($q2) use ($fechaActual, $horaActual){
+                            $q2->where('Fecha_R',$fechaActual)
+                            ->where('Hora_Fin','<=', $horaActual);
                         });
                 })
                 ->update(['B' => '1', 'B_Motivo' => 'Reserva expirada']);
@@ -775,7 +788,7 @@ class RecursosRepository
 
     // Verifica si al reducir la cantidad de un recurso, existen reservas futuras que quedarían en conflicto.
     // Si no hay conflictos, actualiza la cantidad del recurso. Si hay conflictos, retorna las reservas afectadas y la cantidad solicitada.
-    public function verificar_reservas($id_institucion, $id_recurso, $nuevaCantidad)
+    public function verificar_reservas($id_institucion, $id_recurso, $nuevaCantidad, $id_usuario)
     {
         $connName = $this->dataBaseService->selectConexion($id_institucion)->getName();
 
@@ -795,16 +808,14 @@ class RecursosRepository
                 ->orderBy('Hora_Inicio', 'asc')
                 ->get();
 
-            // Si no hay reservas entonces
+            // Si no hay reservas del recurso entonces
             if($reservas->isEmpty()) {
-                $recurso->Cantidad = $nuevaCantidad;
-                $recurso->save();
                 return [
-                    'message' => "Cantidad actualizada sin conflictos.",
+                    'message' => $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad, $id_usuario),
                     'conflicto' => false
                 ];
             }
-            // Evitamos recorrer toda las validaciones
+            // Evitamos recorrer todas las validaciones si la nueva cantidad es 0
             if($nuevaCantidad == 0) {
                 return [
                     'reservas_en_conflicto' => $reservas->map(function($r){
@@ -888,8 +899,16 @@ class RecursosRepository
             }
 
             // Si no hay conflictos, actualizar la cantidad del recurso
-            $recurso->Cantidad = $nuevaCantidad;
-            $recurso->save();
+            DB::connection($connName)->beginTransaction();
+            try {
+                $recurso->Cantidad = $nuevaCantidad;
+                $recurso->save();
+                DB::connection($connName)->commit();
+            }
+            catch (Exception $e) {
+                DB::connection($connName)->rollBack();
+                throw $e;
+            }
             return [
                 'message' => "Cantidad actualizada sin conflictos.",
                 'conflicto' => false
@@ -898,6 +917,7 @@ class RecursosRepository
             throw $e;
         }
     }
+
 
     // Cancela reservas en conflicto y envia notificaciones (debe llamarse solo si el usuario confirma).
     // Cancela las reservas en conflicto y notifica a los usuarios afectados.
@@ -942,7 +962,7 @@ class RecursosRepository
             DB::connection($connName)->commit();
 
             // Intentar nuevamente actualizar la cantidad del recurso después de cancelar los conflictos
-            return $this->verificar_reservas($id_institucion, $id_recurso, $nuevaCantidad);
+            return $this->verificar_reservas($id_institucion, $id_recurso, $nuevaCantidad, $id_usuario);
         }
         catch (Exception $e) {
             DB::connection($connName)->rollback();

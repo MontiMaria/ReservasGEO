@@ -56,7 +56,7 @@ class RecursosController extends Controller
         $data = $request->all();
 
         try {
-            $informe = $this->RecursosService->modificar_cantidad($id, $data['id_recurso'], $data['cantidad']);
+            $informe = $this->RecursosService->modificar_cantidad($id, $data['id_recurso'], $data['cantidad'], $data['id_usuario']);
             return response()->json([
                 'success' => true,
                 'data' => $informe,
@@ -348,7 +348,7 @@ class RecursosController extends Controller
     {
         $data = $request->all();
         try {
-            $informe = $this->RecursosService->verificar_reservas($id, $data['id_recurso'], $data['nuevaCantidad']);
+            $informe = $this->RecursosService->verificar_reservas($id, $data['id_recurso'], $data['nuevaCantidad'], $data['id_usuario']);
 
             return response()->json([
                 'success' => true,
