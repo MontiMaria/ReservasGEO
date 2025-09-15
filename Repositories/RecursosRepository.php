@@ -350,13 +350,16 @@ class RecursosRepository
 
                 RecursoLectura::on($conn_name)
                     ->create([
-                        'ID_Recurso' => $reserva->ID_Recurso,
-                        'ID_Usuario' => $reserva->ID_Usuario,
+                        'ID_Recurso' => $id_recurso,
+                        'ID_Usuario' => $reserva->ID_Docente,
                         'Fecha' => $Fecha_Actual,
                         'Hora' => $Hora_Actual
                     ]);
             }
+
             DB::connection($conn_name)->commit();
+
+            return 'Recurso eliminado correctamente.';
 
         } catch (Exception $e) {
             DB::connection($conn_name)->rollback();
@@ -572,7 +575,7 @@ class RecursosRepository
         }
     }
 
-    public function ver_listado_reservas_activas($id,$id_usuario, $id_nivel, $cant_por_pagina, $pagina){
+    public function ver_listado_reservas_activas($id, $id_usuario, $id_nivel, $cant_por_pagina, $pagina){
         $this->actualizar_reservas_activas($id, $id_usuario, $id_nivel);
         $id_institucion = $id;
         try{
@@ -587,7 +590,7 @@ class RecursosRepository
             if(in_array($rol->Tipo, ['EM', 'DI', 'VD', 'PR', 'SC', 'AM'], true)){
                 $reservas = RecursoReserva::on($connection)
                     ->from('recursos_reservas as rr')
-                    ->select('recursos.Recurso','rr.*','personal.Nombre','personal.Apellido')
+                    ->select('recursos.Recurso','rr.*')
                     ->join('recursos','recursos.ID','=','rr.ID_Recurso')
                     ->join('personal','personal.ID','=','rr.ID_Docente')
                     //se le podría agregar un join con materias para que traiga el nombre de la materia también
@@ -672,8 +675,8 @@ class RecursosRepository
                         $q->where("rr.ID_Nivel", $id_nivel)
                         ->orWhere("rr.ID_Nivel" , 0);
                     })
-                    ->orderBy('rr.Fecha_R','desc')
-                    ->orderBy('rr.Hora_Inicio','desc');
+                    ->orderBy('rr.Fecha_B','desc')
+                    ->orderBy('rr.Hora_B','desc');
             } elseif (in_array($rol->Tipo, ['PF', 'MI', 'MG'])) {
                 $reservas = RecursoReserva::on($connection)
                     ->from('recursos_reservas as rr')
@@ -687,8 +690,8 @@ class RecursosRepository
                         ->orWhere("rr.ID_Nivel" , 0);
                     })
                     ->where('rr.ID_Docente',$id_usuario)
-                    ->orderBy('rr.Fecha_R','desc')
-                    ->orderBy('rr.Hora_Inicio','desc');
+                    ->orderBy('rr.Fecha_B','desc')
+                    ->orderBy('rr.Hora_B','desc');
             } else {
                 throw new InvalidArgumentException("El rol no tiene permisos para ver las reservas históricas.", 403);
             }
@@ -731,7 +734,6 @@ class RecursosRepository
                     $q->where("ID_Nivel", $id_nivel)
                     ->orWhere("ID_Nivel" , 0);
                 })
-                ->where('Estado','=','H')
                 ->where('B','=',0)
                 ->get();
 
@@ -798,6 +800,13 @@ class RecursosRepository
             }
             // Buscar el recurso y obtener reservas futuras activas
             $recurso = Recurso::on($connName)->findOrFail($id_recurso);
+            // Si la cantidad es mayor
+            if($nuevaCantidad > $recurso->Cantidad) {
+                return [
+                    'message' => $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad, $id_usuario),
+                    'conflicto' => false
+                ];
+            }
             $cantidadDisponible = $nuevaCantidad;
             $hoy = Carbon::now("America/Argentina/Buenos_Aires")->format('Y-m-d');
             $reservas = RecursoReserva::on($connName)
@@ -858,7 +867,8 @@ class RecursosRepository
             // Ordenar los eventos cronológicamente para simular la ocupación de recursos
             $eventos = $eventos->sort(function($a, $b) {
                 if ($a['hora']->eq($b['hora'])) {
-                    return $a['tipo'] === 'inicio' ? -1 : 1;
+                    if ($a['tipo'] === $b['tipo']) return 0;
+                    return $a['tipo'] === 'fin' ? -1 : 1;
                 }
                 return $a['hora']->lt($b['hora']) ? -1 : 1;
             })->values();
@@ -899,18 +909,8 @@ class RecursosRepository
             }
 
             // Si no hay conflictos, actualizar la cantidad del recurso
-            DB::connection($connName)->beginTransaction();
-            try {
-                $recurso->Cantidad = $nuevaCantidad;
-                $recurso->save();
-                DB::connection($connName)->commit();
-            }
-            catch (Exception $e) {
-                DB::connection($connName)->rollBack();
-                throw $e;
-            }
             return [
-                'message' => "Cantidad actualizada sin conflictos.",
+                'message' => $this->modificar_cantidad($id_institucion, $id_recurso, $nuevaCantidad, $id_usuario),
                 'conflicto' => false
             ];
         } catch (Exception $e) {
@@ -938,8 +938,14 @@ class RecursosRepository
         DB::connection($connName)->beginTransaction();
 
         try {
+            // Transformamos en una collecion las reservas
+            $items = collect($reservasEnConflicto)->map(function($item) {
+                if(is_array($item)) return (object) $item;
+                return $item;
+            });
+
             // Cancelar cada reserva en conflicto y registrar la notificación de la cancelación
-            collect($reservasEnConflicto)->each(function($reserva) use ($connName, $motivo, $id_usuario) {
+            $items->each(function($reserva) use ($connName, $motivo, $id_usuario) {
                 // Damos de baja la reserva
                 $r = RecursoReserva::on($connName)->findOrFail($reserva->ID);
                 $r->B = 1;
@@ -947,13 +953,13 @@ class RecursosRepository
                 $r->Fecha_B = Carbon::now("America/Argentina/Buenos_Aires")->format('Y-m-d');
                 $r->Hora_B = Carbon::now("America/Argentina/Buenos_Aires")->format('H:i:s');
                 $r->ID_Usuario_B = $id_usuario;
-                $reserva->save();
+                $r->save();
 
                 // Creamos la notificacion
                 $lectura = new RecursoLectura();
                 $lectura->setConnection($connName);
-                $lectura->ID_Reserva = $reserva->ID;
-                $lectura->ID_Usuario = $reserva->ID_Usuario;
+                $lectura->ID_Recurso = $r->ID;
+                $lectura->ID_Usuario = $r->ID_Docente;
                 $lectura->Fecha = Carbon::now("America/Argentina/Buenos_Aires")->format('Y-m-d');
                 $lectura->Hora = Carbon::now("America/Argentina/Buenos_Aires")->format('H:i:s');
                 $lectura->save();
@@ -978,7 +984,7 @@ class RecursosRepository
         if($diaSemana < 1 || $diaSemana > 5) {
             throw new DomainException("La fecha ingresada debe ser un día entre lunes y viernes.");
         }
-        if($fecha->lt(Carbon::today('America/Argentina/Buenos_Aires'))) {
+        if(Carbon::parse($fecha)->lt(Carbon::today('America/Argentina/Buenos_Aires'))) {
             throw new DomainException("La fecha de reserva no puede ser anterior a hoy.");
         }
 

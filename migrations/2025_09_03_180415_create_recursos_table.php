@@ -24,7 +24,7 @@ class CreateRecursosTable extends Migration
                     ->comment("ID tabla recursos_tipos (No exsiste)");
                 $table->integer("ID_Nivel") // ID tabla nivel
                     ->comment("ID tabla nivel");
-                $table->string("Estado", 1)->default("H") // Propongo eliminarlo
+                $table->string("Estado", 1)->default("H") // Ya no es necesario, deberia eliminarse
                     ->comment("Estado H=Habilitado, S=Suspendido");
                 $table->integer("B")->default(0) // Baja
                     ->comment("Baja 0=No, 1=Si");

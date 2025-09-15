@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Cargo extends Model
 {
+    
     //protected $connection = 'mysql2';
     protected $table = 'cargo';
     protected $primaryKey = 'ID';

@@ -370,8 +370,18 @@ class RecursosController extends Controller
 
         $data = $request->all();
 
+        $reservasEnConflicto = $data['reservasEnConflicto'] ?? [];
+
+        if(is_string($reservasEnConflicto)) {
+            $reservasEnConflicto = json_decode($reservasEnConflicto, true) ?: [];
+        }
+
+        if(!is_array($reservasEnConflicto)) {
+            $reservasEnConflicto = [];
+        }
+
         try {
-            $informe = $this->RecursosService->cancelar_reservas_en_conflicto($id, $data['reservasEnConflicto'], $data['id_recurso'], $data['nuevaCantidad'], $data['id_usuario'], $data['motivo']);
+            $informe = $this->RecursosService->cancelar_reservas_en_conflicto($id, $reservasEnConflicto, $data['id_recurso'], $data['nuevaCantidad'], $data['id_usuario'], $data['motivo']);
 
             return response()->json([
                 'success' => true,

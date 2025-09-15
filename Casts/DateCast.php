@@ -19,8 +19,8 @@ class DateCast implements CastsAttributes
      */
     public function get($model, $key, $value, $attributes)
     {
-        if(empty($value)) {
-            return null;
+        if(is_null($value) || $value === '0000-00-00') {
+            return '0000-00-00';
         }
 
         try {
