@@ -566,7 +566,12 @@ class RecursosRepository
                             ->where('Hora_Fin','<=', $horaActual);
                         });
                 })
-                ->update(['B' => '1', 'B_Motivo' => 'Reserva expirada']);
+                ->update([
+                    'B' => '1',
+                    'Fecha_B' => $fechaActual,
+                    'Hora_B' => $horaActual,
+                    'B_Motivo' => 'Reserva expirada'
+                ]);
 
             return "Reservas actualizadas";
 
