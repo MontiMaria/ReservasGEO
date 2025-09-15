@@ -554,13 +554,13 @@ class RecursosRepository
 
             $reservas = RecursoReserva::on($connection)
                 ->where('B','=',0)
+                // Esto se podria sacar para que actualize todas
+                ->where(function($q) use ($id_nivel) {
+                    $q->where("ID_Nivel", $id_nivel)
+                    ->orWhere("ID_Nivel" , 0);
+                })
                 ->where(function($query) use ($fechaActual, $horaActual, $id_nivel){
                     $query->where('Fecha_R', '<', $fechaActual)
-                        // Esto se podria sacar para que actualize todas
-                        ->where(function($q) use ($id_nivel) {
-                            $q->where("rr.ID_Nivel", $id_nivel)
-                            ->orWhere("rr.ID_Nivel" , 0);
-                        })
                         ->orWhere(function($q2) use ($fechaActual, $horaActual){
                             $q2->where('Fecha_R',$fechaActual)
                             ->where('Hora_Fin','<=', $horaActual);
